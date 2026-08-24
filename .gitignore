@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Production builds & Caches
+dist/
+build/
+.expo/
+*.log
+*.zip
+.DS_Store
+Thumbs.db
