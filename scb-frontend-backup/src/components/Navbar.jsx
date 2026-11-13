@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   FaCarSide, FaUserCircle, FaSignOutAlt, FaThLarge,
   FaClipboardList, FaUsers, FaCar, FaHistory, FaHeadset,
-  FaWallet, FaTimes, FaBars, FaGlobe, FaMapMarkedAlt
+  FaWallet, FaTimes, FaBars, FaGlobe, FaMapMarkedAlt, FaSlidersH
 } from 'react-icons/fa';
 import AuthModal from './AuthModal';
 import logo from '../../images/logo.png'
@@ -34,40 +34,50 @@ const LanguageSwitcher = () => {
   const currentLang = languages.find(l => l.code === i18n.language) || languages[0];
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative inline-block text-left" ref={dropdownRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-dark/5 hover:bg-dark/10 border border-border px-3 py-2 rounded-xl transition-all text-sm font-bold text-dark"
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex items-center gap-2 bg-dark/5 hover:bg-dark/10 border border-border px-3 py-2 rounded-xl transition-all text-sm font-bold text-dark cursor-pointer shadow-sm select-none"
       >
         <span className="text-primary text-base"><FaGlobe /></span>
-        <span className="hidden sm:inline text-muted">{currentLang.label}</span>
+        <span className="hidden sm:inline text-dark font-bold">{currentLang.label}</span>
         <motion.span animate={{ rotate: isOpen ? 180 : 0 }} className="text-[10px] text-muted">▼</motion.span>
       </button>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            initial={{ opacity: 0, y: 6, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute right-0 mt-2 w-40 bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden z-[60] backdrop-blur-xl"
+            exit={{ opacity: 0, y: 6, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-0 top-full mt-2 w-44 bg-[#FFFDF9] border border-border rounded-2xl shadow-2xl overflow-hidden z-[9999]"
+            style={{ backgroundColor: '#FFFDF9' }}
           >
-            {languages.map((lang) => (
-              <button
-                key={lang.code}
-                onClick={() => {
-                  if (i18n.language !== lang.code) {
+            <div className="p-1.5 space-y-1">
+              {languages.map((lang) => (
+                <button
+                  key={lang.code}
+                  type="button"
+                  onClick={() => {
                     i18n.changeLanguage(lang.code);
-                  }
-                  setIsOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-4 py-3 text-sm font-bold transition-all ${i18n.language === lang.code ? 'bg-primary text-dark' : 'text-muted hover:bg-dark/5'
+                    setIsOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                    i18n.language === lang.code
+                      ? 'bg-primary text-dark shadow-sm'
+                      : 'text-dark hover:bg-dark/5'
                   }`}
-              >
-                <span>{lang.label}</span>
-                {i18n.language === lang.code && <span className="text-[10px]">●</span>}
-              </button>
-            ))}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base">{lang.flag}</span>
+                    <span>{lang.label}</span>
+                  </span>
+                  {i18n.language === lang.code && <span className="text-xs font-black">✓</span>}
+                </button>
+              ))}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -94,6 +104,7 @@ const Navbar = ({ user, logout, login, setAdminTab, setDriverTab, setCustomerTab
       { id: 'Cars', label: t('nav.cars'), path: '/admin', icon: <FaCar /> },
       { id: 'Payments', label: t('nav.payments'), path: '/admin', icon: <FaWallet /> },
       { id: 'Reports', label: t('nav.reports'), path: '/admin', icon: <FaClipboardList /> },
+      { id: 'Settings', label: 'QR & Settings', path: '/admin', icon: <FaSlidersH /> },
     ],
     customer: [
       { id: 'Dashboard', label: t('nav.dashboard'), path: '/book', icon: <FaThLarge /> },
@@ -136,17 +147,19 @@ const Navbar = ({ user, logout, login, setAdminTab, setDriverTab, setCustomerTab
           </Link>
 
           {/* Desktop Menu */}
-          <div className="hidden md:flex items-center gap-1 lg:gap-2 xl:gap-3 text-xs xl:text-sm font-bold flex-nowrap shrink-0 overflow-x-auto custom-scrollbar">
-            {currentMenu.map((item, index) => (
-              <button
-                key={index}
-                onClick={() => handleNavClick(item)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl hover:bg-dark/5 hover:text-primary transition-all text-muted whitespace-nowrap shrink-0"
-              >
-                {item.icon && <span className="text-primary text-xs shrink-0">{item.icon}</span>}
-                <span>{item.label}</span>
-              </button>
-            ))}
+          <div className="hidden md:flex items-center gap-2 lg:gap-4 shrink-0">
+            <div className="flex items-center gap-1 lg:gap-2 xl:gap-3 text-xs xl:text-sm font-bold flex-nowrap shrink-0 overflow-x-auto max-w-[50vw] custom-scrollbar py-1">
+              {currentMenu.map((item, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleNavClick(item)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl hover:bg-dark/5 hover:text-primary transition-all text-muted whitespace-nowrap shrink-0"
+                >
+                  {item.icon && <span className="text-primary text-xs shrink-0">{item.icon}</span>}
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
 
             <div className="flex items-center gap-2 ml-1 xl:ml-3 shrink-0">
               <LanguageSwitcher />

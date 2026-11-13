@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
+  Platform,
 } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
 import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
+import LeafletMapView from '../../components/LeafletMapView';
 
 const { width, height } = Dimensions.get('window');
 
@@ -196,67 +197,15 @@ export default function LiveTrackingScreen({ route, navigation }) {
       <StatusBar barStyle="dark-content" />
 
       {/* ── MAPVIEW ── */}
-      <MapView
-        ref={mapRef}
+      <LeafletMapView
+        pickupCoords={booking.pickupCoords}
+        dropCoords={booking.dropCoords}
+        carCoords={carCoords}
+        pickupLabel={booking.pickup}
+        dropLabel={booking.drop}
+        routeCoords={booking.routeCoords}
         style={styles.map}
-        initialRegion={{
-          latitude: booking.pickupCoords.latitude,
-          longitude: booking.pickupCoords.longitude,
-          latitudeDelta: 0.2,
-          longitudeDelta: 0.2,
-        }}
-      >
-        {/* Route Line - Double layered for premium Google Maps shadow style */}
-        <Polyline
-          coordinates={booking.routeCoords}
-          strokeColor="rgba(21, 87, 176, 0.4)"
-          strokeWidth={8}
-        />
-        <Polyline
-          coordinates={booking.routeCoords}
-          strokeColor="#1A73E8" // Premium Active Google Blue
-          strokeWidth={4}
-        />
-
-        {/* Pickup Pin */}
-        <Marker
-          coordinate={booking.pickupCoords}
-          title="Pickup Location"
-          description={booking.pickup}
-          pinColor="#22C55E"
-        />
-
-        {/* Drop Pin */}
-        <Marker
-          coordinate={booking.dropCoords}
-          title="Drop Location"
-          description={booking.drop}
-          pinColor="#EF4444"
-        />
-
-        {/* Car Marker */}
-        {carCoords && (
-          <Marker
-            coordinate={carCoords}
-            title="SafarSetu Active Cab"
-            description={trackingStatus}
-          >
-            <View style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 20,
-              padding: 6,
-              borderWidth: 2,
-              borderColor: '#1A73E8',
-              shadowColor: '#000',
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-              elevation: 4
-            }}>
-              <Text style={{ fontSize: 20 }}>🚖</Text>
-            </View>
-          </Marker>
-        )}
-      </MapView>
+      />
 
       {/* ── FLOAT CONTROL BANNER ── */}
       <View style={styles.statusCard}>
@@ -292,17 +241,38 @@ export default function LiveTrackingScreen({ route, navigation }) {
         <Text style={styles.routeDetail} numberOfLines={1}>🟢 {booking.pickup} ➔ 🔴 {booking.drop}</Text>
 
         {booking.driver ? (
-          <View style={styles.driverSection}>
-            <View style={styles.driverAvatar}>
-              <Text style={styles.avatarText}>👤</Text>
+          <View>
+            <View style={styles.driverSection}>
+              <View style={styles.driverAvatar}>
+                <Text style={styles.avatarText}>👤</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.driverName}>{booking.driver.name}</Text>
+                <Text style={styles.vehicleInfo}>
+                  {booking.driver.vehicleName || booking.car} • {booking.driver.vehicleNumber || 'MP-CAB'}
+                </Text>
+              </View>
+              <View style={styles.assignedBadge}>
+                <Text style={styles.assignedBadgeText}>ASSIGNED</Text>
+              </View>
             </View>
-            <View>
-              <Text style={styles.driverName}>{booking.driver.name}</Text>
-              <Text style={styles.vehicleInfo}>Plate: {booking.driver.vehicleNumber}</Text>
+
+            {/* Ride Verification OTP Card */}
+            <View style={styles.otpCard}>
+              <View style={styles.otpTextWrap}>
+                <Text style={styles.otpBadgeTitle}>YOUR RIDE START / DROP OTP</Text>
+                <Text style={styles.otpCodeText}>{booking.otp || '4821'}</Text>
+                <Text style={styles.otpNoteText}>
+                  Share this 4-digit code with driver upon reaching drop point to confirm and verify ride.
+                </Text>
+              </View>
+              <View style={styles.otpIconBadge}>
+                <Text style={{ fontSize: 26 }}>🔑</Text>
+              </View>
             </View>
           </View>
         ) : (
-          <Text style={styles.noDriverText}>Waiting for driver to accept...</Text>
+          <Text style={styles.noDriverText}>Waiting for driver assignment by Admin...</Text>
         )}
 
         <TouchableOpacity style={styles.recenterBtn} onPress={fitRouteBounds}>
@@ -433,6 +403,60 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     paddingVertical: 12,
     textAlign: 'center',
+  },
+  assignedBadge: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  assignedBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  otpCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+    gap: 10,
+  },
+  otpTextWrap: {
+    flex: 1,
+  },
+  otpBadgeTitle: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#B45309',
+    letterSpacing: 0.8,
+  },
+  otpCodeText: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#92400E',
+    letterSpacing: 6,
+    marginVertical: 2,
+  },
+  otpNoteText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#78350F',
+    lineHeight: 14,
+  },
+  otpIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
   },
   recenterBtn: {
     backgroundColor: COLORS.background,

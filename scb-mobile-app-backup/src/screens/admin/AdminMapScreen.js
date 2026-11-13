@@ -8,8 +8,9 @@ import {
   Dimensions,
   StatusBar,
   Image,
+  Platform,
 } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import LeafletMapView from '../../components/LeafletMapView';
 import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
 
@@ -199,68 +200,17 @@ export default function AdminMapScreen({ route, navigation }) {
       <StatusBar barStyle="dark-content" />
 
       {/* ── MAPVIEW ── */}
-      <MapView
-        ref={mapRef}
+      <LeafletMapView
+        pickupCoords={booking.pickupCoords}
+        dropCoords={booking.dropCoords}
+        pickupLabel={booking.pickup || 'Pickup'}
+        dropLabel={booking.drop || 'Drop'}
+        routeCoords={booking.routeCoords || []}
+        carCoords={carCoords}
+        distanceKm={booking.distance}
+        durationMin={booking.duration}
         style={styles.map}
-        initialRegion={{
-          latitude: booking.pickupCoords.latitude,
-          longitude: booking.pickupCoords.longitude,
-          latitudeDelta: 0.2,
-          longitudeDelta: 0.2,
-        }}
-      >
-        {/* Glow Polyline for Premium shadow effect */}
-        <Polyline
-          coordinates={booking.routeCoords}
-          strokeColor="rgba(217, 154, 54, 0.3)"
-          strokeWidth={10}
-        />
-        {/* Main Active Gold Polyline */}
-        <Polyline
-          coordinates={booking.routeCoords}
-          strokeColor="#D99A36" 
-          strokeWidth={4}
-        />
-
-        {/* Pickup Pin */}
-        <Marker
-          coordinate={booking.pickupCoords}
-          title="Pickup Location"
-          description={booking.pickup}
-          pinColor="#22C55E"
-        />
-
-        {/* Drop Pin */}
-        <Marker
-          coordinate={booking.dropCoords}
-          title="Drop Location"
-          description={booking.drop}
-          pinColor="#EF4444"
-        />
-
-        {/* Car Marker */}
-        {carCoords && (
-          <Marker
-            coordinate={carCoords}
-            title="SafarSetu Active Cab"
-            description={trackingStatus}
-          >
-            <View style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 20,
-              padding: 6,
-              borderWidth: 2,
-              borderColor: '#D99A36',
-              shadowColor: '#000',
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-              elevation: 4
-            }}>
-              <Text style={{ fontSize: 20 }}>🚖</Text>
-            </View>
-          </Marker>
-        )}
-      </MapView>
+      />
 
       {/* ── BOTTOM CARD ── */}
       <View style={styles.bottomCard}>

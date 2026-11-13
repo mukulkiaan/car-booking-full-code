@@ -6,6 +6,16 @@ const UI_STATUS = {
   CANCELLED: 'Cancelled',
 };
 
+export function getBookingOtp(id) {
+  if (!id) return '4821';
+  let sum = 0;
+  for (let i = 0; i < id.length; i++) {
+    sum = (sum * 31 + id.charCodeAt(i)) % 10000;
+  }
+  const otpVal = 1000 + (Math.abs(sum) % 9000);
+  return String(otpVal);
+}
+
 export function bookingToJson(b) {
   const driverProfile = b.driver?.driverProfile;
   return {
@@ -20,17 +30,20 @@ export function bookingToJson(b) {
     fare: Math.round(b.fare),
     car: b.carName,
     status: UI_STATUS[b.status] || b.status,
+    otp: getBookingOtp(b.id),
     driverUserId: b.driverId || null,
     driver:
       b.driver && driverProfile
         ? {
             name: b.driver.name,
+            phone: b.driver.phone,
             vehicleName: driverProfile.carType,
             vehicleNumber: driverProfile.vehicleNumber,
           }
         : b.driver
           ? {
               name: b.driver.name,
+              phone: b.driver.phone,
               vehicleName: b.carName,
               vehicleNumber: '',
             }
@@ -40,6 +53,9 @@ export function bookingToJson(b) {
     pickupLng: b.pickupLng,
     dropLat: b.dropLat,
     dropLng: b.dropLng,
+    advancePaid: b.advancePaid || 0,
+    advanceStatus: b.advanceStatus || 'PENDING',
+    advanceUtr: b.advanceUtr || null,
   };
 }
 

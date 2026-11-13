@@ -9,7 +9,8 @@ import {
   FaChevronRight, FaHeadset, FaCrosshairs, FaSearch,
   FaPhoneAlt, FaRoute, FaUserCircle, FaCreditCard,
   FaPhone, FaHistory, FaTimes, FaShieldAlt,
-  FaGlobeAmericas, FaMap, FaMountain
+  FaGlobeAmericas, FaMap, FaMountain, FaExpand, FaCompress,
+  FaChevronDown, FaWhatsapp, FaCopy, FaCheckCircle, FaMoneyBillWave
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import RouteMap from '../../components/RouteMap';
@@ -155,20 +156,264 @@ const MAP_LAYERS = {
   },
 };
 
+// ── 12-HOUR TIME PICKER COMPONENT WITH EXPLICIT AM / PM ──
+function TimePicker12Hour({ value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  const parseVal = (val) => {
+    if (!val || typeof val !== 'string') {
+      const now = new Date();
+      let h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const p = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return { hour: String(h).padStart(2, '0'), minute: m, period: p };
+    }
+    const m12 = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (m12) {
+      let h = parseInt(m12[1], 10);
+      const m = m12[2];
+      let p = m12[3] ? m12[3].toUpperCase() : null;
+      if (!p) {
+        p = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+      } else {
+        if (h > 12) h = h % 12 || 12;
+        if (h === 0) h = 12;
+      }
+      return { hour: String(h).padStart(2, '0'), minute: m, period: p };
+    }
+    return { hour: '12', minute: '00', period: 'PM' };
+  };
+
+  const parsed = parseVal(value);
+  const [hour, setHour] = useState(parsed.hour);
+  const [minute, setMinute] = useState(parsed.minute);
+  const [period, setPeriod] = useState(parsed.period);
+
+  useEffect(() => {
+    const p = parseVal(value);
+    setHour(p.hour);
+    setMinute(p.minute);
+    setPeriod(p.period);
+  }, [value]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const updateTime = (newH, newM, newP) => {
+    setHour(newH);
+    setMinute(newM);
+    setPeriod(newP);
+    onChange(`${newH}:${newM} ${newP}`);
+  };
+
+  const setPreset = (offsetMinutes) => {
+    const d = new Date(Date.now() + offsetMinutes * 60 * 1000);
+    let h = d.getHours();
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const p = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    const hStr = String(h).padStart(2, '0');
+    updateTime(hStr, m, p);
+  };
+
+  const hoursList = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+  const minutesList = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full text-left input-field pl-9 pr-2.5 text-xs py-3 bg-dark/5 border-border rounded-xl font-bold flex items-center justify-between hover:border-primary transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 group cursor-pointer"
+      >
+        <FaClock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary text-xs pointer-events-none group-hover:scale-110 transition-transform" />
+        <span className="text-dark font-black tracking-wide text-xs">
+          {hour}:{minute} <span className={period === 'AM' ? 'text-amber-600' : 'text-blue-600'}>{period}</span>
+        </span>
+        <span
+          className={`text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider flex items-center gap-1 shadow-xs ${
+            period === 'AM'
+              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+              : 'bg-blue-100 text-blue-900 border border-blue-300'
+          }`}
+        >
+          <span>{period === 'AM' ? '☀️' : '🌙'}</span>
+          <span>{period}</span>
+          <FaChevronDown className={`text-[8px] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </span>
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 right-0 sm:left-auto sm:right-0 sm:w-80 top-full mt-2 bg-white border-2 border-primary/40 rounded-2xl shadow-2xl p-3.5 z-50 text-dark"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2.5 border-b border-gray-100 mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <FaClock className="text-primary text-xs" />
+                <span className="text-[11px] font-black uppercase tracking-wider text-gray-700">Select Time (12-Hr)</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-lg">
+                <span className="text-xs font-black text-dark">{hour}:{minute}</span>
+                <span className={`text-[10px] font-black px-1.5 py-0.2 rounded ${
+                  period === 'AM' ? 'bg-amber-400 text-black' : 'bg-primary text-black'
+                }`}>
+                  {period === 'AM' ? '☀️ AM' : '🌙 PM'}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <button
+                type="button"
+                onClick={() => setPreset(0)}
+                className="flex-1 py-1 px-1 text-[10px] font-black bg-gray-100 hover:bg-primary/20 text-gray-800 rounded-lg transition-all"
+              >
+                🔥 Now
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreset(30)}
+                className="flex-1 py-1 px-1 text-[10px] font-black bg-gray-100 hover:bg-primary/20 text-gray-800 rounded-lg transition-all"
+              >
+                ⏱️ +30m
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreset(60)}
+                className="flex-1 py-1 px-1 text-[10px] font-black bg-gray-100 hover:bg-primary/20 text-gray-800 rounded-lg transition-all"
+              >
+                🚗 +1h
+              </button>
+            </div>
+
+            {/* 3 Columns */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {/* Hour */}
+              <div>
+                <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider block mb-1">Hour (1-12)</span>
+                <div className="h-36 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+                  {hoursList.map(h => (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => updateTime(h, minute, period)}
+                      className={`w-full py-1 text-xs rounded-lg font-bold transition-all ${
+                        hour === h
+                          ? 'bg-primary text-black font-black shadow-sm ring-1 ring-primary'
+                          : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Minute */}
+              <div>
+                <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider block mb-1">Minute</span>
+                <div className="h-36 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+                  {minutesList.map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => updateTime(hour, m, period)}
+                      className={`w-full py-1 text-xs rounded-lg font-bold transition-all ${
+                        minute === m
+                          ? 'bg-primary text-black font-black shadow-sm ring-1 ring-primary'
+                          : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* AM / PM Column */}
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider block mb-1">AM / PM</span>
+                <div className="flex-1 flex flex-col justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateTime(hour, minute, 'AM')}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                      period === 'AM'
+                        ? 'bg-amber-400 text-black border-2 border-amber-500 shadow-md ring-2 ring-amber-400/50'
+                        : 'bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200'
+                    }`}
+                  >
+                    <span className="text-sm">☀️</span>
+                    <span className="text-xs font-black">AM</span>
+                    <span className="text-[8px] font-semibold opacity-75">Morning</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => updateTime(hour, minute, 'PM')}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                      period === 'PM'
+                        ? 'bg-primary text-black border-2 border-primary shadow-md ring-2 ring-primary/50'
+                        : 'bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200'
+                    }`}
+                  >
+                    <span className="text-sm">🌙</span>
+                    <span className="text-xs font-black">PM</span>
+                    <span className="text-[8px] font-semibold opacity-75">Noon/Night</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Set Time CTA */}
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="mt-3 w-full py-2 bg-primary hover:opacity-95 text-black font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>✓ Set Time:</span>
+              <span className="underline">{hour}:{minute} {period}</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   const { t } = useTranslation();
 
   // Full Screen Live Map Modal
   const [showFullLiveTrackingModal, setShowFullLiveTrackingModal] = useState(false);
 
-  // Locations state (Central India default coordinates: Barwani to Indore)
-  const [pickup, setPickup] = useState('Barwani, Madhya Pradesh');
-  const [drop, setDrop] = useState('Indore, Madhya Pradesh');
-  const [pickupCoords, setPickupCoords] = useState({ lat: 22.0366, lng: 74.9031 });
-  const [dropCoords, setDropCoords] = useState({ lat: 22.7196, lng: 75.8577 });
-  const [routeCoords, setRouteCoords] = useState([[22.0366, 74.9031], [22.7196, 75.8577]]);
-  const [distance, setDistance] = useState(145);
-  const [durationMin, setDurationMin] = useState(180);
+  // Locations state (Defaults empty so customer selects own locations)
+  const [pickup, setPickup] = useState('');
+  const [drop, setDrop] = useState('');
+  const [pickupCoords, setPickupCoords] = useState(null);
+  const [dropCoords, setDropCoords] = useState(null);
+  const [routeCoords, setRouteCoords] = useState([]);
+  const [distance, setDistance] = useState(0);
+  const [durationMin, setDurationMin] = useState(0);
 
   // Map Mode & Layers (Default Google Map)
   const [mapLayer, setMapLayer] = useState('roadmap'); // 'roadmap' | 'satellite' | 'terrain' | 'traffic'
@@ -185,7 +430,10 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   const [cars, setCars] = useState(DEFAULT_CARS);
   const [selectedCar, setSelectedCar] = useState(DEFAULT_CARS[0]);
   const [modalFilter, setModalFilter] = useState('All');
+  const [modalSearch, setModalSearch] = useState('');
+  const [modalRateFilter, setModalRateFilter] = useState('all');
   const [showAllCarsModal, setShowAllCarsModal] = useState(false);
+  const [isModalFullscreen, setIsModalFullscreen] = useState(false);
 
   // Booking & UI state
   const [status, setStatus] = useState('idle');
@@ -198,7 +446,109 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   const pickupSearchTimer = useRef(null);
   const dropSearchTimer = useRef(null);
 
-  const displayName = user?.name || t('booking.rider_fallback', 'Rider');
+  // Customer Profile State
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profileLocation, setProfileLocation] = useState(user?.location || '');
+  const [profileWhatsapp, setProfileWhatsapp] = useState(user?.whatsapp || '');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [currentDisplayName, setCurrentDisplayName] = useState(user?.name || '');
+
+  // Dynamic App Settings (QR Code, UPI, Helpline)
+  const [appSettings, setAppSettings] = useState({
+    qrCodeUrl: null,
+    upiId: '9755339783@upi',
+    advanceAmount: 200,
+    helpline1: '6261828036',
+    helpline2: '9755339783',
+  });
+
+  // Advance Booking Modal State
+  const [showAdvanceModal, setShowAdvanceModal] = useState(false);
+  const [advanceUtr, setAdvanceUtr] = useState('');
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+
+  useEffect(() => {
+    api('/api/catalog/settings')
+      .then((res) => {
+        if (res) {
+          setAppSettings({
+            qrCodeUrl: res.qrCodeUrl || null,
+            upiId: res.upiId || '9755339783@upi',
+            advanceAmount: res.advanceAmount || 200,
+            helpline1: res.helpline1 || '6261828036',
+            helpline2: res.helpline2 || '9755339783',
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleWhatsApp = () => {
+    const text = `Namaste SafarSetu! I want to book a ride from "${pickup || 'Pickup'}" to "${drop || 'Destination'}". Total Distance: ${distance > 0 ? `${distance} KM` : 'To be calculated'}. Selected Vehicle: ${selectedCar?.name || 'Cab'} (₹${selectedCar?.pricePerKm || 12}/km). Please provide the final negotiated fare.`;
+    window.open(`https://wa.me/91${appSettings.helpline1}?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  useEffect(() => {
+    if (user) {
+      setProfileName(user.name || '');
+      setProfileLocation(user.location || '');
+      setProfileWhatsapp(user.whatsapp || '');
+      setCurrentDisplayName(user.name || '');
+    }
+  }, [user]);
+
+  // Set default booking date & 12-hour time if empty
+  useEffect(() => {
+    if (!bookingDate) {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      setBookingDate(`${yyyy}-${mm}-${dd}`);
+    }
+    if (!bookingTime) {
+      const now = new Date();
+      let h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const p = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      setBookingTime(`${String(h).padStart(2, '0')}:${m} ${p}`);
+    }
+  }, []);
+
+  const handleSaveProfile = async (e) => {
+    if (e) e.preventDefault();
+    setIsUpdatingProfile(true);
+    try {
+      const res = await api('/api/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: profileName,
+          location: profileLocation,
+          whatsapp: profileWhatsapp,
+        }),
+      });
+      if (res.user) {
+        setCurrentDisplayName(res.user.name);
+        const saved = localStorage.getItem('authUser');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            localStorage.setItem('authUser', JSON.stringify({ ...parsed, ...res.user }));
+          } catch {}
+        }
+        toast.success('Profile updated successfully!');
+        setShowProfileModal(false);
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to update profile');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const displayName = currentDisplayName || t('booking.rider_fallback', 'Rider');
 
   const translateStatus = (st) => {
     const map = {
@@ -246,6 +596,7 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
 
   // Recalculate Route when coords or text changes
   const calculateRoute = useCallback(async (pText, dText, pCoord, dCoord) => {
+    if (!pText || !dText) return;
     try {
       const route = await postMapRoute(pText, dText, pCoord, dCoord);
       if (route && route.coordinates?.length) {
@@ -263,10 +614,11 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   // Debounced Route trigger
   useEffect(() => {
     if (routeTimer.current) clearTimeout(routeTimer.current);
+    if (!pickup?.trim() || !drop?.trim()) {
+      return;
+    }
     routeTimer.current = setTimeout(() => {
-      if (pickup && drop) {
-        calculateRoute(pickup, drop, pickupCoords, dropCoords);
-      }
+      calculateRoute(pickup, drop, pickupCoords, dropCoords);
     }, 600);
     return () => {
       if (routeTimer.current) clearTimeout(routeTimer.current);
@@ -277,6 +629,12 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   const handlePickupChange = (e) => {
     const val = e.target.value;
     setPickup(val);
+    if (!val.trim()) {
+      setPickupCoords(null);
+      setRouteCoords([]);
+      setDistance(0);
+      setDurationMin(0);
+    }
     if (pickupSearchTimer.current) clearTimeout(pickupSearchTimer.current);
     if (val.trim().length >= 2) {
       pickupSearchTimer.current = setTimeout(async () => {
@@ -294,6 +652,12 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   const handleDropChange = (e) => {
     const val = e.target.value;
     setDrop(val);
+    if (!val.trim()) {
+      setDropCoords(null);
+      setRouteCoords([]);
+      setDistance(0);
+      setDurationMin(0);
+    }
     if (dropSearchTimer.current) clearTimeout(dropSearchTimer.current);
     if (val.trim().length >= 2) {
       dropSearchTimer.current = setTimeout(async () => {
@@ -310,17 +674,23 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   // Select Pickup suggestion
   const selectPickupSuggestion = (item) => {
     setPickup(item.name);
-    setPickupCoords({ lat: item.lat, lng: item.lng });
+    const newCoord = { lat: item.lat, lng: item.lng };
+    setPickupCoords(newCoord);
     setShowPickupDropdown(false);
-    calculateRoute(item.name, drop, { lat: item.lat, lng: item.lng }, dropCoords);
+    if (drop?.trim()) {
+      calculateRoute(item.name, drop, newCoord, dropCoords);
+    }
   };
 
   // Select Drop suggestion
   const selectDropSuggestion = (item) => {
     setDrop(item.name);
-    setDropCoords({ lat: item.lat, lng: item.lng });
+    const newCoord = { lat: item.lat, lng: item.lng };
+    setDropCoords(newCoord);
     setShowDropDropdown(false);
-    calculateRoute(pickup, item.name, pickupCoords, { lat: item.lat, lng: item.lng });
+    if (pickup?.trim()) {
+      calculateRoute(pickup, item.name, pickupCoords, newCoord);
+    }
   };
 
   // Handle Dragging Pickup Marker
@@ -331,7 +701,9 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
     const address = await reverseGeocodeCoord(lat, lng);
     setPickup(address);
     toast.success(`Pickup set: ${address.split(',')[0]}`, { id: 'drag-geo' });
-    calculateRoute(address, drop, newCoord, dropCoords);
+    if (drop?.trim()) {
+      calculateRoute(address, drop, newCoord, dropCoords);
+    }
   };
 
   // Handle Dragging Drop Marker
@@ -342,7 +714,9 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
     const address = await reverseGeocodeCoord(lat, lng);
     setDrop(address);
     toast.success(`Drop set: ${address.split(',')[0]}`, { id: 'drag-geo-drop' });
-    calculateRoute(pickup, address, pickupCoords, newCoord);
+    if (pickup?.trim()) {
+      calculateRoute(pickup, address, pickupCoords, newCoord);
+    }
   };
 
   // Handle Direct Map Click
@@ -355,7 +729,9 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
       setPickup(address);
       setMapPickMode(null);
       toast.success(`Pickup set: ${address.split(',')[0]}`, { id: 'map-click' });
-      calculateRoute(address, drop, newCoord, dropCoords);
+      if (drop?.trim()) {
+        calculateRoute(address, drop, newCoord, dropCoords);
+      }
     } else if (mapPickMode === 'drop') {
       setDropCoords(newCoord);
       toast.loading('Setting drop destination on map...', { id: 'map-click' });
@@ -363,7 +739,9 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
       setDrop(address);
       setMapPickMode(null);
       toast.success(`Drop set: ${address.split(',')[0]}`, { id: 'map-click' });
-      calculateRoute(pickup, address, pickupCoords, newCoord);
+      if (pickup?.trim()) {
+        calculateRoute(pickup, address, pickupCoords, newCoord);
+      }
     }
   };
 
@@ -385,7 +763,9 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
         setPickup(address);
         setIsLocating(false);
         toast.success(`Located: ${address.split(',')[0]}`, { id: toastId });
-        calculateRoute(address, drop, newCoord, dropCoords);
+        if (drop?.trim()) {
+          calculateRoute(address, drop, newCoord, dropCoords);
+        }
       },
       (err) => {
         setIsLocating(false);
@@ -395,10 +775,18 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
     );
   };
 
-  const fare = selectedCar ? Math.round(distance * selectedCar.pricePerKm) : 0;
+  const fare = selectedCar && distance > 0 ? Math.round(distance * selectedCar.pricePerKm) : 0;
 
-  // Handle Booking Submit
-  const handleBooking = async () => {
+  // Handle Booking Submit & Advance Confirmation
+  const handleBooking = () => {
+    if (!pickup?.trim()) {
+      toast.error('Please enter pickup location');
+      return;
+    }
+    if (!drop?.trim()) {
+      toast.error('Please enter destination location');
+      return;
+    }
     if (!selectedCar) {
       toast.error(t('booking.toast_loading_cars', 'Please select a car'));
       return;
@@ -407,7 +795,12 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
       toast.error(t('booking.toast_select_datetime', 'Please select booking date and time'));
       return;
     }
+    setShowAdvanceModal(true);
+  };
+
+  const confirmBooking = async (withAdvance = false) => {
     try {
+      setIsSubmittingBooking(true);
       await api('/api/bookings', {
         method: 'POST',
         body: JSON.stringify({
@@ -416,20 +809,31 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
           bookingDate,
           bookingTime,
           carName: selectedCar.name,
-          fare,
+          fare: 0,
           distanceKm: distance,
           routeCoords,
-          pickupLat: pickupCoords.lat,
-          pickupLng: pickupCoords.lng,
-          dropLat: dropCoords.lat,
-          dropLng: dropCoords.lng,
+          pickupLat: pickupCoords?.lat || null,
+          pickupLng: pickupCoords?.lng || null,
+          dropLat: dropCoords?.lat || null,
+          dropLng: dropCoords?.lng || null,
+          advancePaid: withAdvance,
+          advanceUtr: withAdvance && advanceUtr.trim() ? advanceUtr.trim() : null,
+          advanceStatus: withAdvance ? 'PENDING_APPROVAL' : null,
         }),
       });
+      setShowAdvanceModal(false);
+      setAdvanceUtr('');
       await loadBookings();
       setStatus('searching');
-      toast.success(t('booking.toast_booking_sent', 'Booking request sent successfully!'));
+      toast.success(
+        withAdvance
+          ? 'Ride booked! Advance payment submitted for verification.'
+          : 'Booking request sent! Our helpline team will call you to confirm.'
+      );
     } catch (e) {
       toast.error(e.message || t('booking.toast_booking_failed', 'Booking failed'));
+    } finally {
+      setIsSubmittingBooking(false);
     }
   };
 
@@ -442,9 +846,38 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
   }, [cars]);
 
   const modalFilteredCars = useMemo(() => {
-    if (modalFilter === 'All') return cars;
-    return cars.filter(c => (c.name === modalFilter || c.type === modalFilter));
-  }, [cars, modalFilter]);
+    return cars.filter((car) => {
+      // 1. Category pill filter
+      if (modalFilter !== 'All') {
+        const matchesCategory =
+          car.name?.toLowerCase() === modalFilter.toLowerCase() ||
+          car.type?.toLowerCase() === modalFilter.toLowerCase();
+        if (!matchesCategory) return false;
+      }
+
+      // 2. Text Search filter (Search car name or type...)
+      if (modalSearch.trim()) {
+        const q = modalSearch.trim().toLowerCase();
+        const matchesSearch =
+          car.name?.toLowerCase().includes(q) ||
+          (car.type && car.type.toLowerCase().includes(q));
+        if (!matchesSearch) return false;
+      }
+
+      // 3. Rate & Seats Dropdown criteria
+      if (modalRateFilter === 'rate_low') {
+        if (Number(car.pricePerKm) >= 15) return false;
+      } else if (modalRateFilter === 'rate_high') {
+        if (Number(car.pricePerKm) < 15) return false;
+      } else if (modalRateFilter === 'seats_4') {
+        if (Number(car.seats) !== 4) return false;
+      } else if (modalRateFilter === 'seats_6_plus') {
+        if (Number(car.seats) < 6) return false;
+      }
+
+      return true;
+    });
+  }, [cars, modalFilter, modalSearch, modalRateFilter]);
 
   return (
     <div className="pt-16 min-h-screen bg-background text-dark">
@@ -454,10 +887,22 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="p-4 sm:p-8 lg:p-12 max-w-7xl mx-auto space-y-8">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
             <div>
-              <h2 className="text-3xl sm:text-5xl font-black italic tracking-tighter uppercase text-dark leading-none">
-                {t('booking.hello')}, <span className="text-primary">{displayName}</span>
-              </h2>
-              <p className="text-muted text-[10px] sm:text-xs uppercase font-black tracking-widest mt-2">{t('booking.welcome_hub')}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-3xl sm:text-5xl font-black italic tracking-tighter uppercase text-dark leading-none">
+                  {t('booking.hello')}, <span className="text-primary">{displayName}</span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowProfileModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-dark/5 hover:bg-primary/20 border border-border hover:border-primary rounded-xl text-xs font-black uppercase tracking-wider text-dark transition-all cursor-pointer shadow-sm"
+                >
+                  <FaUserCircle className="text-primary text-sm" />
+                  <span>Edit Profile</span>
+                </button>
+              </div>
+              <p className="text-muted text-[10px] sm:text-xs uppercase font-black tracking-widest mt-2">
+                {t('booking.welcome_hub')} • 📍 {profileLocation || 'Barwani, Madhya Pradesh'}
+              </p>
             </div>
             <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 px-4 sm:px-6 py-3 rounded-2xl shadow-lg shadow-primary/5">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-xl flex items-center justify-center text-dark text-xl sm:text-2xl shadow-inner"><FaCreditCard /></div>
@@ -526,7 +971,7 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                       drop={allBookings[0].drop}
                       routeCoords={allBookings[0].routeCoords}
                       distanceKm={allBookings[0].distance ? parseFloat(String(allBookings[0].distance).replace(/[^0-9.]/g, '')) : 145}
-                      driverCoords={[pickupCoords.lat, pickupCoords.lng]}
+                      driverCoords={[pickupCoords?.lat || 22.0366, pickupCoords?.lng || 74.9031]}
                       showLayerToggle={true}
                     />
                   </div>
@@ -558,7 +1003,7 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                       <div className="bg-dark/5 p-4 rounded-2xl border border-border space-y-1.5 text-xs">
                         <div className="flex justify-between"><span className="text-muted font-bold">Pickup:</span><strong className="text-dark truncate max-w-[150px]">{allBookings[0].pickup}</strong></div>
                         <div className="flex justify-between"><span className="text-muted font-bold">Drop:</span><strong className="text-dark truncate max-w-[150px]">{allBookings[0].drop}</strong></div>
-                        <div className="flex justify-between border-t border-border/50 pt-1.5"><span className="text-muted font-bold">Fare:</span><strong className="text-primary font-black text-base">₹{allBookings[0].fare}</strong></div>
+                        <div className="flex justify-between border-t border-border/50 pt-1.5"><span className="text-muted font-bold">Vehicle:</span><strong className="text-primary font-black text-sm">{allBookings[0].carName || 'Cab'} • {allBookings[0].distance || 'Per-KM Rate'}</strong></div>
                       </div>
                     </div>
 
@@ -600,7 +1045,7 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                             <p className="text-[9px] text-muted font-bold">{ride.date}</p>
                           </div>
                         </div>
-                        <p className="text-sm font-black text-primary">₹{ride.fare}</p>
+                        <span className="text-[10px] font-black uppercase text-primary px-2 py-0.5 rounded bg-primary/10">{ride.status}</span>
                      </div>
                    ))
                  ) : (
@@ -805,15 +1250,10 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                         className="input-field pl-9 text-xs py-3 bg-dark/5 border-border rounded-xl font-bold"
                       />
                     </div>
-                    <div className="relative">
-                      <FaClock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary text-xs pointer-events-none" />
-                      <input
-                        type="time"
-                        value={bookingTime}
-                        onChange={e => setBookingTime(e.target.value)}
-                        className="input-field pl-9 text-xs py-3 bg-dark/5 border-border rounded-xl font-bold"
-                      />
-                    </div>
+                    <TimePicker12Hour
+                      value={bookingTime}
+                      onChange={setBookingTime}
+                    />
                   </div>
                 </div>
 
@@ -855,8 +1295,10 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xl font-black text-dark leading-none">₹{fare}</p>
-                        <span className="text-[8px] text-muted uppercase font-bold">Est. Total</span>
+                        <span className="inline-block bg-primary text-dark font-black text-xs px-2.5 py-1 rounded-lg uppercase tracking-wider">
+                          ₹{selectedCar.pricePerKm}/km
+                        </span>
+                        <p className="text-[10px] text-muted uppercase font-bold mt-1">Per-KM Rate</p>
                       </div>
                     </div>
                   ) : (
@@ -879,16 +1321,50 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                   </button>
                 </div>
 
-                {/* Submit Booking Button */}
+                {/* Distance & Rate Summary Card (No Rupee Fare Calculation) */}
                 <div className="pt-2">
-                  <div className="bg-dark/5 p-3 rounded-2xl flex justify-between items-center mb-3 border border-border">
+                  <div className="bg-dark/5 p-3.5 rounded-2xl flex justify-between items-center mb-3 border border-border">
                     <div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted">Estimated Ride Fare</p>
-                      <p className="text-2xl font-black text-dark">₹{fare}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted">Trip Distance</p>
+                      <p className="text-xl sm:text-2xl font-black text-dark">{distance > 0 ? `${distance} KM` : '-- KM'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted">{distance} KM • {durationMin} MIN</p>
-                      <p className="text-xs font-bold text-primary">{selectedCar?.name || 'Cab'}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted">{durationMin ? `${durationMin} MIN EST.` : 'Direct Route'}</p>
+                      <span className="inline-block bg-primary/20 text-dark font-black text-xs px-2 py-0.5 rounded mt-0.5">
+                        ₹{selectedCar?.pricePerKm || 12}/km Rate
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 24x7 Helpline & WhatsApp Assistance */}
+                  <div className="p-3 bg-primary/10 rounded-2xl border border-primary/30 mb-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-dark flex items-center gap-1.5">
+                        <FaPhoneAlt className="text-primary" /> 24x7 Direct Helpline & Booking
+                      </span>
+                      <span className="text-[9px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                        Instant Fare Quote
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <a
+                        href={`tel:${appSettings.helpline1}`}
+                        className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-white border border-border text-dark text-xs font-black shadow-sm hover:bg-dark hover:text-white transition-all text-center"
+                      >
+                        <FaPhoneAlt size={10} className="text-primary" /> Call {appSettings.helpline1}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleWhatsApp}
+                        className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-xs font-black shadow-sm transition-all text-center"
+                      >
+                        <FaWhatsapp size={14} /> WhatsApp Chat
+                      </button>
+                    </div>
+                    <div className="text-center pt-0.5">
+                      <a href={`tel:${appSettings.helpline2}`} className="text-[10px] text-muted hover:text-dark font-bold underline">
+                        Alternate Helpline: {appSettings.helpline2}
+                      </a>
                     </div>
                   </div>
 
@@ -908,8 +1384,8 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
           <div className={`w-full relative transition-all duration-300 ${!showMobilePanel ? 'h-[280px]' : 'h-[80vh]'} lg:flex-1 lg:h-[calc(100vh-64px)]`}>
             
             <MapContainer
-              center={[pickupCoords.lat, pickupCoords.lng]}
-              zoom={12}
+              center={pickupCoords ? [pickupCoords.lat, pickupCoords.lng] : (dropCoords ? [dropCoords.lat, dropCoords.lng] : [22.7196, 75.8577])}
+              zoom={pickupCoords || dropCoords ? 12 : 8}
               className={`w-full h-full z-10 ${mapPickMode ? 'cursor-crosshair' : ''}`}
               style={{ height: '100%', width: '100%', background: '#e5e7eb' }}
             >
@@ -925,40 +1401,48 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
               <MapClickHandler mapPickMode={mapPickMode} onMapClick={handleMapClick} />
 
               {/* Draggable Pickup Marker */}
-              <DraggableMarker
-                position={[pickupCoords.lat, pickupCoords.lng]}
-                icon={pickupIcon}
-                onDragEnd={handlePickupDrag}
-                popupTitle="🟢 Pickup Location"
-                subtitle={pickup}
-              />
+              {pickupCoords && (
+                <DraggableMarker
+                  position={[pickupCoords.lat, pickupCoords.lng]}
+                  icon={pickupIcon}
+                  onDragEnd={handlePickupDrag}
+                  popupTitle="🟢 Pickup Location"
+                  subtitle={pickup}
+                />
+              )}
 
               {/* Draggable Drop Marker */}
-              <DraggableMarker
-                position={[dropCoords.lat, dropCoords.lng]}
-                icon={dropIcon}
-                onDragEnd={handleDropDrag}
-                popupTitle="🔴 Drop Destination"
-                subtitle={drop}
-              />
+              {dropCoords && (
+                <DraggableMarker
+                  position={[dropCoords.lat, dropCoords.lng]}
+                  icon={dropIcon}
+                  onDragEnd={handleDropDrag}
+                  popupTitle="🔴 Drop Destination"
+                  subtitle={drop}
+                />
+              )}
 
               {/* Real Road Polyline */}
-              <Polyline
-                positions={routeCoords}
-                color="#0f172a"
-                weight={8}
-                opacity={0.3}
-                lineCap="round"
-                lineJoin="round"
-              />
-              <Polyline
-                positions={routeCoords}
-                color="#EAB308"
-                weight={5}
-                opacity={0.95}
-                lineCap="round"
-                lineJoin="round"
-              />
+              {routeCoords && routeCoords.length > 0 && (
+                <>
+                  <Polyline
+                    positions={routeCoords}
+                    color="#0f172a"
+                    weight={8}
+                    opacity={0.3}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                  <Polyline
+                    positions={routeCoords}
+                    color="#EAB308"
+                    weight={5}
+                    opacity={0.95}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                </>
+              )}
             </MapContainer>
 
             {/* ── MAP PICK MODE ACTIVE BANNER ── */}
@@ -985,24 +1469,26 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
             </AnimatePresence>
 
             {/* ── TOP LEFT: HUD INFO PILL ── */}
-            <div className="absolute top-4 left-4 z-[990] glass-card bg-background/95 backdrop-blur-xl border border-primary/30 shadow-2xl rounded-2xl p-3 flex items-center gap-3.5 pointer-events-auto">
-              <div className="w-9 h-9 rounded-xl bg-primary text-dark flex items-center justify-center text-sm shadow-md shadow-primary/20 shrink-0">
-                <FaRoute />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-black text-dark tracking-tight leading-none">
-                    {distance} <span className="text-[10px] font-bold text-muted uppercase">KM</span>
-                  </span>
-                  <span className="text-[11px] font-bold text-primary flex items-center gap-1">
-                    • <FaClock size={10} /> {durationMin} min
-                  </span>
+            {distance > 0 && (
+              <div className="absolute top-4 left-4 z-[990] glass-card bg-background/95 backdrop-blur-xl border border-primary/30 shadow-2xl rounded-2xl p-3 flex items-center gap-3.5 pointer-events-auto">
+                <div className="w-9 h-9 rounded-xl bg-primary text-dark flex items-center justify-center text-sm shadow-md shadow-primary/20 shrink-0">
+                  <FaRoute />
                 </div>
-                <p className="text-[9px] text-green-600 font-bold uppercase tracking-wider mt-0.5 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Fastest Road Route
-                </p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-black text-dark tracking-tight leading-none">
+                      {distance} <span className="text-[10px] font-bold text-muted uppercase">KM</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-primary flex items-center gap-1">
+                      • <FaClock size={10} /> {durationMin} min
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-green-600 font-bold uppercase tracking-wider mt-0.5 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Fastest Road Route
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* ── TOP RIGHT: GOOGLE MAPS STYLE LAYER SWITCHER (DEFAULT, SATELLITE, TERRAIN, TRAFFIC) ── */}
             <div className="absolute top-4 right-4 z-[990] flex items-center gap-1.5 bg-background/95 backdrop-blur-md p-1.5 rounded-2xl border border-border shadow-2xl">
@@ -1043,7 +1529,10 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                     <div className="bg-dark/5 p-4 rounded-2xl text-left text-xs space-y-1.5 mb-6 border border-border">
                       <p><span className="text-muted font-bold">Pickup:</span> <strong className="text-dark">{pickup}</strong></p>
                       <p><span className="text-muted font-bold">Drop:</span> <strong className="text-dark">{drop}</strong></p>
-                      <p><span className="text-muted font-bold">Vehicle:</span> <strong className="text-primary">{selectedCar?.name} (₹{fare})</strong></p>
+                      <p><span className="text-muted font-bold">Vehicle:</span> <strong className="text-primary">{selectedCar?.name} (₹{selectedCar?.pricePerKm || 12}/km)</strong></p>
+                      {distance > 0 && (
+                        <p><span className="text-muted font-bold">Distance:</span> <strong className="text-dark">{distance} KM</strong></p>
+                      )}
                     </div>
                     <button
                       onClick={() => setStatus('idle')}
@@ -1060,112 +1549,237 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
         </div>
       )}
 
-      {/* ── ALL VEHICLES POPUP MODAL (COMPARE & SELECT) ── */}
+      {/* ── ALL VEHICLES POPUP MODAL (COMPARE & SELECT - FULL SCREEN CAPABLE) ── */}
       <AnimatePresence>
         {showAllCarsModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[2000] bg-dark/60 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => setShowAllCarsModal(false)}
+            className={`fixed inset-0 z-[2000] bg-dark/75 backdrop-blur-md flex items-center justify-center transition-all ${
+              isModalFullscreen ? 'p-0' : 'p-2 sm:p-3 md:p-4'
+            }`}
           >
             <motion.div
-              initial={{ scale: 0.92, y: 20 }}
+              initial={{ scale: 0.96, y: 15 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.92, y: 20 }}
-              className="bg-surface border border-border rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 max-h-[85vh] flex flex-col"
+              exit={{ scale: 0.96, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className={`bg-surface shadow-2xl flex flex-col justify-between overflow-hidden transition-all duration-200 ${
+                isModalFullscreen
+                  ? 'w-full h-full rounded-none border-0 p-4 sm:p-6 md:p-8'
+                  : 'w-full h-[98vh] max-w-[99vw] rounded-2xl sm:rounded-3xl border border-border/80 p-4 sm:p-6 md:p-7'
+              }`}
             >
-              <div className="flex justify-between items-center pb-4 border-b border-border">
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-black italic tracking-tighter uppercase text-dark">
-                    Select Your <span className="text-primary">Ride</span>
-                  </h3>
-                  <p className="text-xs text-muted font-bold">Compare verified fleet vehicles & transparent distance rates</p>
+              {/* Modal Top Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-border shrink-0">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <h3 className="text-xl sm:text-2xl font-black italic tracking-tighter uppercase text-dark">
+                      Select Your <span className="text-primary">Ride</span>
+                    </h3>
+                    <p className="text-xs text-muted font-bold">Compare verified fleet vehicles & transparent distance rates</p>
+                  </div>
+                  <span className="hidden sm:inline-flex text-[11px] font-black uppercase px-3 py-1 rounded-full bg-primary/20 text-dark border border-primary/30">
+                    {modalFilteredCars.length} Fleet Vehicles
+                  </span>
                 </div>
-                <button
-                  onClick={() => setShowAllCarsModal(false)}
-                  className="w-9 h-9 rounded-full bg-dark/5 hover:bg-dark/10 flex items-center justify-center text-muted hover:text-dark transition-colors"
-                >
-                  <FaTimes />
-                </button>
-              </div>
-
-              {/* Modal Category Filter Pills */}
-              <div className="flex gap-2 pt-4 pb-2 overflow-x-auto no-scrollbar">
-                {modalCategories.map((cat) => (
+                <div className="flex items-center gap-2">
                   <button
-                    key={cat}
-                    onClick={() => setModalFilter(cat)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
-                      modalFilter === cat 
-                        ? 'bg-primary text-dark shadow-md shadow-primary/30 scale-105' 
-                        : 'bg-dark/5 text-muted hover:bg-dark/10 hover:text-dark'
-                    }`}
+                    type="button"
+                    onClick={() => setIsModalFullscreen(!isModalFullscreen)}
+                    className="w-10 h-10 rounded-full bg-dark/5 hover:bg-dark/10 flex items-center justify-center text-muted hover:text-dark transition-all text-sm shrink-0"
+                    title={isModalFullscreen ? 'Exit full screen' : 'Toggle full screen'}
                   >
-                    {cat}
+                    {isModalFullscreen ? <FaCompress /> : <FaExpand />}
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowAllCarsModal(false)}
+                    className="w-10 h-10 rounded-full bg-dark/5 hover:bg-dark/10 flex items-center justify-center text-muted hover:text-dark transition-all text-base shrink-0"
+                    title="Close comparison"
+                  >
+                    <FaTimes />
+                  </button>
+                </div>
               </div>
 
-              {/* Modal Vehicle Grid */}
-              <div className="py-3 space-y-3 overflow-y-auto custom-scrollbar flex-1">
-                {modalFilteredCars.map((car) => {
-                  const isSelected = selectedCar && selectedCar.id === car.id;
-                  const carFare = Math.round(distance * car.pricePerKm);
-                  return (
-                    <div
-                      key={car.id}
+              {/* ── SEARCH & FILTER TOOLBAR (SEARCH BAR + RATE/SEATS DROPDOWN + CATEGORY PILLS) ── */}
+              <div className="shrink-0 pt-4 pb-3 border-b border-border/40 space-y-3">
+                {/* Search Bar & Dropdown Select Row */}
+                <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
+                  {/* Search Input */}
+                  <div className="relative flex-1">
+                    <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-xs pointer-events-none" />
+                    <input
+                      type="text"
+                      value={modalSearch}
+                      onChange={(e) => setModalSearch(e.target.value)}
+                      placeholder="Search car name or type (e.g. Echo, Sedan, SUV)..."
+                      className="input-field pl-10 pr-9 py-2.5 text-xs font-bold text-dark bg-dark/5 border-border hover:border-primary/40 focus:border-primary rounded-xl w-full transition-all"
+                    />
+                    {modalSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setModalSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-dark text-xs p-1"
+                        title="Clear search"
+                      >
+                        <FaTimes />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Filter (Rate & Seats) */}
+                  <div className="relative sm:w-auto">
+                    <select
+                      value={modalRateFilter}
+                      onChange={(e) => setModalRateFilter(e.target.value)}
+                      className="input-field py-2.5 px-3.5 text-xs font-black uppercase tracking-wider text-dark bg-dark/5 border-border hover:border-primary/40 focus:border-primary rounded-xl cursor-pointer w-full transition-all"
+                    >
+                      <option value="all">ALL RATES & SEATS</option>
+                      <option value="rate_low">RATE UNDER ₹15/KM</option>
+                      <option value="rate_high">RATE ₹15+/KM</option>
+                      <option value="seats_4">4 SEATS</option>
+                      <option value="seats_6_plus">6+ SEATS</option>
+                    </select>
+                  </div>
+
+                  {/* Reset/Clear Button */}
+                  {(modalSearch || modalRateFilter !== 'all' || modalFilter !== 'All') && (
+                    <button
+                      type="button"
                       onClick={() => {
-                        setSelectedCar(car);
-                        setShowAllCarsModal(false);
-                        toast.success(`${car.name} selected!`);
+                        setModalSearch('');
+                        setModalRateFilter('all');
+                        setModalFilter('All');
                       }}
-                      className={`cursor-pointer p-4 rounded-2xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:scale-[1.01] ${
-                        isSelected
-                          ? 'border-primary bg-primary/10 shadow-lg shadow-primary/10'
-                          : 'border-border hover:border-primary/30 bg-dark/5'
+                      className="px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider text-red-500 hover:bg-red-500/10 rounded-xl transition-all shrink-0 text-center"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Pills (ALL, VAN, ECHO, MINI, SEDAN, SUV, LUXURY) */}
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 px-0.5">
+                  {modalCategories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setModalFilter(cat)}
+                      className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap border ${
+                        modalFilter === cat 
+                          ? 'bg-primary text-dark border-primary shadow-md shadow-primary/25 font-black' 
+                          : 'bg-dark/5 text-muted border-border/50 hover:bg-dark/10 hover:text-dark font-bold'
                       }`}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="w-20 h-16 bg-white rounded-xl flex items-center justify-center p-2 shadow-sm border border-border shrink-0">
-                          <img src={car.image} alt={car.name} className="w-full h-full object-contain" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-lg font-black text-dark">{car.name}</h4>
-                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-primary/20 text-dark">
-                              {car.type || 'Standard'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted font-bold mt-1">
-                            {car.seats} Passenger Seats • {car.eta || '3 mins'} ETA
-                          </p>
-                          <p className="text-[11px] text-green-600 font-bold mt-0.5 flex items-center gap-1">
-                            <FaShieldAlt size={10} /> Commercial Permit & Sanitized
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-0 pt-2 sm:pt-0 border-border/50">
-                        <div>
-                          <p className="text-2xl font-black text-dark sm:text-right">₹{carFare}</p>
-                          <p className="text-[10px] text-muted sm:text-right">₹{car.pricePerKm}/km base rate</p>
-                        </div>
-                        <button className={`mt-2 px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                          isSelected ? 'bg-primary text-dark' : 'bg-dark text-white hover:bg-primary hover:text-dark'
-                        }`}>
-                          {isSelected ? 'Selected ✓' : 'Select'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="pt-4 border-t border-border flex justify-end">
+              {/* Modal Vehicle Comparison Grid (Responsive Multi-Column) */}
+              <div className="py-4 overflow-y-auto custom-scrollbar flex-1 pr-1">
+                {modalFilteredCars.length === 0 ? (
+                  <div className="text-center py-16 px-4 border border-dashed border-border rounded-2xl bg-dark/5 my-auto">
+                    <p className="text-xs font-black uppercase tracking-wider text-muted mb-2">
+                      No vehicles found matching your filters
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalSearch('');
+                        setModalRateFilter('all');
+                        setModalFilter('All');
+                      }}
+                      className="btn-primary px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl shadow-md shadow-primary/20"
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3.5 sm:gap-4">
+                    {modalFilteredCars.map((car) => {
+                      const isSelected = selectedCar && selectedCar.id === car.id;
+                      const carFare = Math.round(distance * car.pricePerKm);
+                      return (
+                        <div
+                          key={car.id}
+                          onClick={() => {
+                            setSelectedCar(car);
+                            setShowAllCarsModal(false);
+                            toast.success(`${car.name} selected!`);
+                          }}
+                          className={`cursor-pointer p-4 rounded-2xl border-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 transition-all hover:shadow-lg hover:-translate-y-0.5 ${
+                            isSelected
+                              ? 'border-primary bg-primary/10 shadow-lg shadow-primary/15 ring-2 ring-primary/40'
+                              : 'border-border hover:border-primary/40 bg-dark/5 hover:bg-dark/10'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className="w-20 h-16 bg-white rounded-xl flex items-center justify-center p-2 shadow-sm border border-border shrink-0">
+                              <img src={car.image} alt={car.name} className="w-full h-full object-contain" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-base sm:text-lg font-black text-dark truncate">{car.name}</h4>
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-primary/20 text-dark">
+                                  {car.type || 'Standard'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted font-bold mt-1">
+                                {car.seats} Passenger Seats • {car.eta || '3 mins'} ETA
+                              </p>
+                              <p className="text-[11px] text-green-600 font-bold mt-0.5 flex items-center gap-1">
+                                <FaShieldAlt size={10} className="shrink-0" /> Commercial Permit & Sanitized
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-0 pt-2 sm:pt-0 border-border/50 shrink-0">
+                            <div>
+                              <span className="inline-block bg-primary text-dark font-black text-base sm:text-lg px-3 py-1 rounded-xl">
+                                ₹{car.pricePerKm}/km
+                              </span>
+                              <p className="text-[10px] text-muted sm:text-right font-bold mt-1">Per-KM Rate Only</p>
+                            </div>
+                            <button
+                              type="button"
+                              className={`mt-2 px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+                                isSelected ? 'bg-primary text-dark font-black' : 'bg-dark text-white hover:bg-primary hover:text-dark'
+                              }`}
+                            >
+                              {isSelected ? 'Selected ✓' : 'Select'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Bottom Bar */}
+              <div className="pt-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2 text-xs font-bold text-muted">
+                  {selectedCar ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>Currently Selected:</span>
+                      <span className="font-black text-dark bg-primary/20 px-3 py-1 rounded-lg border border-primary/30">
+                        {selectedCar.name} • ₹{selectedCar.pricePerKm}/km ({distance > 0 ? `${distance} KM` : 'Direct Route'})
+                      </span>
+                    </div>
+                  ) : (
+                    <span>Select any vehicle to confirm</span>
+                  )}
+                </div>
                 <button
+                  type="button"
                   onClick={() => setShowAllCarsModal(false)}
-                  className="bg-primary text-dark font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow-lg shadow-primary/20"
+                  className="bg-primary hover:bg-primary-hover text-dark font-black uppercase tracking-wider text-xs px-8 py-3 rounded-xl shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] w-full sm:w-auto text-center"
                 >
                   Done
                 </button>
@@ -1328,7 +1942,7 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                   drop={allBookings[0].drop}
                   routeCoords={allBookings[0].routeCoords}
                   distanceKm={allBookings[0].distance ? parseFloat(String(allBookings[0].distance).replace(/[^0-9.]/g, '')) : 145}
-                  driverCoords={[pickupCoords.lat, pickupCoords.lng]}
+                  driverCoords={[pickupCoords?.lat || 22.0366, pickupCoords?.lng || 74.9031]}
                   showLayerToggle={true}
                   turnInstruction="Captain moving along Google Maps route"
                 />
@@ -1339,7 +1953,7 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                   {allBookings[0].driver && (
                     <span className="text-muted">Captain: <strong className="text-dark">{allBookings[0].driver.name} ({allBookings[0].driver.vehicleNumber})</strong></span>
                   )}
-                  <span className="text-muted">Fare: <strong className="text-primary font-black text-sm">₹{allBookings[0].fare}</strong></span>
+                  <span className="text-muted">Vehicle: <strong className="text-primary font-black text-sm">{allBookings[0].carName || 'Cab'}</strong></span>
                   <span className="text-muted">Status: <strong className="text-green-600 font-black">{allBookings[0].status}</strong></span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1359,6 +1973,247 @@ const BookingPage = ({ activeTab, user, setCustomerTab }) => {
                     Switch to Book View
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── CUSTOMER PROFILE EDIT MODAL ── */}
+      <AnimatePresence>
+        {showProfileModal && (
+          <div className="fixed inset-0 z-[2000] bg-dark/60 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="bg-surface border border-border rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 relative"
+            >
+              <div className="flex justify-between items-center pb-4 border-b border-border mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/20 text-primary rounded-xl flex items-center justify-center text-xl font-black">
+                    <FaUserCircle />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black italic tracking-tighter uppercase text-dark">
+                      My <span className="text-primary">Profile</span>
+                    </h3>
+                    <p className="text-[10px] text-muted font-black uppercase tracking-wider">Update Rider Details</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowProfileModal(false)}
+                  className="w-8 h-8 rounded-full bg-dark/5 hover:bg-dark/10 flex items-center justify-center text-muted hover:text-dark transition-colors"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                {/* Verified Mobile Number Badge */}
+                <div className="p-3.5 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-black tracking-widest text-green-700 block">Verified Mobile Number</span>
+                    <strong className="text-sm font-black text-dark">+91 {user?.phone}</strong>
+                  </div>
+                  <span className="text-xs font-black text-green-600 bg-green-500/20 px-2.5 py-1 rounded-lg uppercase">
+                    ✓ Verified
+                  </span>
+                </div>
+
+                {/* Name */}
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-wider text-muted block mb-1.5">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    placeholder="Enter your name (e.g. Rahul Sharma)"
+                    className="input-field text-sm font-bold text-dark py-3"
+                    required
+                  />
+                </div>
+
+                {/* City / Home Location */}
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-wider text-muted block mb-1.5">
+                    Default City / Location
+                  </label>
+                  <input
+                    type="text"
+                    value={profileLocation}
+                    onChange={(e) => setProfileLocation(e.target.value)}
+                    placeholder="e.g. Barwani, Madhya Pradesh"
+                    className="input-field text-sm font-bold text-dark py-3"
+                  />
+                </div>
+
+                {/* WhatsApp / Alternate Number */}
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-wider text-muted block mb-1.5">
+                    WhatsApp / Alternate Contact (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={profileWhatsapp}
+                    onChange={(e) => setProfileWhatsapp(e.target.value)}
+                    placeholder="e.g. 9876543210"
+                    className="input-field text-sm font-bold text-dark py-3"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowProfileModal(false)}
+                    className="flex-1 py-3 bg-dark/5 hover:bg-dark/10 rounded-xl font-black text-xs uppercase tracking-wider text-muted transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingProfile}
+                    className="flex-1 btn-primary py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
+                  >
+                    {isUpdatingProfile ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── ADVANCE BOOKING & QR PAYMENT MODAL ── */}
+      <AnimatePresence>
+        {showAdvanceModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isSubmittingBooking && setShowAdvanceModal(false)}
+              className="absolute inset-0 bg-dark/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-[#FFFDF9] rounded-3xl p-6 sm:p-8 max-w-lg w-full relative z-10 border border-border shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center pb-4 border-b border-border">
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black uppercase text-dark">
+                    Advance Ride Booking
+                  </h3>
+                  <p className="text-xs text-muted font-bold">
+                    Pay ₹{appSettings.advanceAmount || 200} token advance to confirm your vehicle
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanceModal(false)}
+                  className="w-8 h-8 rounded-full bg-dark/5 flex items-center justify-center text-muted hover:text-dark"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+
+              {/* Trip Summary Card */}
+              <div className="my-4 p-4 rounded-2xl bg-dark/5 border border-border space-y-2">
+                <div className="flex justify-between items-center text-xs font-bold text-muted">
+                  <span>Selected Vehicle:</span>
+                  <span className="font-black text-dark">{selectedCar?.name} (₹{selectedCar?.pricePerKm}/km)</span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-bold text-muted">
+                  <span>Estimated Distance:</span>
+                  <span className="font-black text-dark">{distance > 0 ? `${distance} KM` : 'To be confirmed'}</span>
+                </div>
+                <div className="pt-2 border-t border-border flex justify-between items-center">
+                  <span className="text-xs font-black uppercase text-dark">Advance Token Amount:</span>
+                  <span className="text-lg font-black text-primary">₹{appSettings.advanceAmount || 200}</span>
+                </div>
+              </div>
+
+              {/* QR Code Container */}
+              <div className="flex flex-col items-center justify-center p-5 bg-white rounded-2xl border-2 border-primary/30 shadow-inner my-4">
+                <div className="w-48 h-48 bg-white p-2 rounded-xl flex items-center justify-center border border-border shadow-sm">
+                  <img
+                    src={appSettings.qrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`upi://pay?pa=${appSettings.upiId}&pn=SafarSetu&am=${appSettings.advanceAmount || 200}&cu=INR`)}`}
+                    alt="SafarSetu UPI QR Code"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <p className="text-xs font-bold text-dark mt-3">
+                  Scan using Google Pay, PhonePe, Paytm or BHIM
+                </p>
+
+                {/* UPI ID with Copy button */}
+                <div className="mt-3 flex items-center gap-2 bg-dark/5 px-3 py-1.5 rounded-xl border border-border">
+                  <span className="text-xs font-bold text-muted">UPI ID:</span>
+                  <strong className="text-xs font-black text-dark">{appSettings.upiId}</strong>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(appSettings.upiId);
+                      toast.success('UPI ID copied!');
+                    }}
+                    className="text-primary hover:text-dark text-xs p-1"
+                    title="Copy UPI ID"
+                  >
+                    <FaCopy />
+                  </button>
+                </div>
+
+                {/* Direct Pay via UPI link */}
+                <a
+                  href={`upi://pay?pa=${encodeURIComponent(appSettings.upiId)}&pn=SafarSetu&am=${appSettings.advanceAmount || 200}&cu=INR`}
+                  className="mt-3 inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-primary hover:underline"
+                >
+                  <FaMoneyBillWave /> Pay Directly on UPI App ↗
+                </a>
+              </div>
+
+              {/* UTR Input */}
+              <div className="space-y-1.5 mb-5">
+                <label className="block text-xs font-black uppercase text-dark tracking-wider">
+                  Enter UTR / Transaction Reference Number (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={advanceUtr}
+                  onChange={(e) => setAdvanceUtr(e.target.value)}
+                  placeholder="e.g. 3241XXXXXXXX or UPI Ref"
+                  className="w-full bg-white border border-border rounded-xl px-4 py-3 text-sm font-bold text-dark focus:outline-none focus:border-primary"
+                />
+                <p className="text-[10px] text-muted">
+                  Entering UTR verifies your advance faster with our dispatch team.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => confirmBooking(true)}
+                  disabled={isSubmittingBooking}
+                  className="w-full btn-primary py-3.5 rounded-xl font-black uppercase tracking-wider text-xs shadow-lg shadow-primary/25 hover:scale-[1.01] transition-all flex items-center justify-center gap-2"
+                >
+                  <FaCheckCircle />
+                  <span>{isSubmittingBooking ? 'Confirming...' : 'I Have Paid Advance • Confirm Ride'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => confirmBooking(false)}
+                  disabled={isSubmittingBooking}
+                  className="w-full py-3 rounded-xl bg-dark/5 hover:bg-dark/10 text-dark font-black uppercase tracking-wider text-xs transition-all border border-border"
+                >
+                  Book Without Advance (Pay Cash / Discuss with Helpline)
+                </button>
               </div>
             </motion.div>
           </div>

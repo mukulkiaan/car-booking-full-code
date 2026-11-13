@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,21 +6,57 @@ import {
   ScrollView,
   StatusBar,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
+import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
 
 export default function DriverEarningsScreen() {
-  const earningsData = {
+  const [earningsData, setEarningsData] = useState({
     weeklyTotal: 18400,
     monthlyTotal: 72850,
     bonuses: 4200,
     tripsCompleted: 48,
     onlineHours: 36.5,
     rating: 4.95,
+  });
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchEarnings = async () => {
+    try {
+      const res = await api.get('/api/bookings/driver-stats');
+      if (res.data) {
+        setEarningsData(prev => ({
+          ...prev,
+          weeklyTotal: res.data.weeklyEarnings || prev.weeklyTotal,
+          monthlyTotal: res.data.monthlyEarnings || prev.monthlyTotal,
+          tripsCompleted: res.data.tripsDone || prev.tripsCompleted,
+          onlineHours: res.data.onlineHours || prev.onlineHours,
+          rating: res.data.rating || prev.rating,
+        }));
+      }
+    } catch (e) {
+      // Fallback to current values
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEarnings();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchEarnings();
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
       {/* ── TOP HERO CARD ── */}
@@ -69,13 +105,13 @@ export default function DriverEarningsScreen() {
         </View>
       </View>
 
-      {/* ── POLICY / DEDUCTION NOTE ── */}
+      {/* ── TRIP SETTLEMENT & RIDE CONFIRMATION INFO ── */}
       <View style={styles.infoCard}>
-        <Text style={styles.infoEmoji}>💡</Text>
+        <Text style={styles.infoEmoji}>🤝</Text>
         <View style={styles.infoTextWrapper}>
-          <Text style={styles.infoTitle}>Automatic Payouts Enabled</Text>
+          <Text style={styles.infoTitle}>Ride Settlement & Admin Assignment</Text>
           <Text style={styles.infoDesc}>
-            Earnings are auto-credited to your linked bank account every Monday at 04:00 AM. Admin commission (12%) has already been deducted.
+            Bookings appear when assigned by Admin. Rides are confirmed upon entering customer's ride OTP at destination. Fares are settled directly upon verified ride completion.
           </Text>
         </View>
       </View>

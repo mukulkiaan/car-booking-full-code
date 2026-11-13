@@ -23,7 +23,12 @@ export default function DriverHistoryScreen() {
       // Filter for completed or cancelled bookings for history, sorted newest first
       const sorted = data
         .filter(b => b.status === 'Completed' || b.status === 'Cancelled')
-        .sort((a, b) => b.id - a.id);
+        .sort((a, b) => {
+          const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          if (tb !== ta) return tb - ta;
+          return String(b.id || '').localeCompare(String(a.id || ''));
+        });
       setHistory(sorted);
     } catch (e) {
       console.error('DriverHistoryScreen: Failed to fetch bookings history', e);

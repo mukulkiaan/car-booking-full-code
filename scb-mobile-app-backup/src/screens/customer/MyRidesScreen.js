@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function MyRidesScreen({ navigation }) {
   const [bookings, setBookings] = useState([]);
@@ -19,13 +20,19 @@ export default function MyRidesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState('All');
+  const { locale, t } = useLanguage();
 
   const fetchBookings = useCallback(async () => {
     try {
       const res = await api.get('/api/bookings');
       const data = res.data || [];
       // Sort: newest first
-      const sorted = [...data].sort((a, b) => b.id - a.id);
+      const sorted = [...data].sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (tb !== ta) return tb - ta;
+        return String(b.id || '').localeCompare(String(a.id || ''));
+      });
       setBookings(sorted);
       applyFilter(activeFilter, sorted);
     } catch (e) {
@@ -72,11 +79,12 @@ export default function MyRidesScreen({ navigation }) {
               setLoading(true);
               // Call API to cancel the booking
               await api.patch(`/api/bookings/${bookingId}`, { status: 'Cancelled' });
-              Alert.alert('Cancelled', 'Your ride has been successfully cancelled.');
+              Alert.alert('Ride Cancelled', 'Your ride request has been successfully cancelled.');
               fetchBookings();
             } catch (err) {
               console.error(err);
-              Alert.alert('Error', 'Unable to cancel ride. Please try again.');
+              const errMsg = err.response?.data?.message || err.message || 'Unable to cancel ride. Please try again.';
+              Alert.alert('Cancellation Notice', errMsg);
               setLoading(false);
             }
           }
@@ -152,7 +160,9 @@ export default function MyRidesScreen({ navigation }) {
             style={styles.cancelButton}
             onPress={() => handleCancelBooking(item.id)}
           >
-            <Text style={styles.cancelButtonText}>❌ CANCEL REQUEST</Text>
+            <Text style={styles.cancelButtonText}>
+              {locale === 'nimadi' ? '❌ राइड रद्द करो' : locale === 'hi' ? '❌ राइड रद्द करें' : '❌ CANCEL REQUEST'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -160,6 +170,15 @@ export default function MyRidesScreen({ navigation }) {
   );
 
   const filters = ['All', 'Pending', 'Accepted', 'Completed', 'Cancelled'];
+
+  const getFilterLabel = (f) => {
+    if (f === 'All') return locale === 'nimadi' ? 'सब' : locale === 'hi' ? 'सभी' : 'All';
+    if (f === 'Pending') return locale === 'nimadi' ? 'पेंडिंग' : locale === 'hi' ? 'प्रतीक्षारत' : 'Pending';
+    if (f === 'Accepted') return locale === 'nimadi' ? 'स्वीकार' : locale === 'hi' ? 'स्वीकृत' : 'Accepted';
+    if (f === 'Completed') return locale === 'nimadi' ? 'पूरी' : locale === 'hi' ? 'पूर्ण' : 'Completed';
+    if (f === 'Cancelled') return locale === 'nimadi' ? 'रद्द' : locale === 'hi' ? 'रद्द' : 'Cancelled';
+    return f;
+  };
 
   return (
     <View style={styles.container}>
@@ -181,7 +200,7 @@ export default function MyRidesScreen({ navigation }) {
                 style={[styles.filterChip, active && styles.activeFilterChip]}
               >
                 <Text style={[styles.filterChipText, active && styles.activeFilterChipText]}>
-                  {item}
+                  {getFilterLabel(item)}
                 </Text>
               </TouchableOpacity>
             );
@@ -202,7 +221,9 @@ export default function MyRidesScreen({ navigation }) {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No rides found under this category.</Text>
+              <Text style={styles.emptyText}>
+                {locale === 'nimadi' ? 'कोई राइड नी मिली।' : locale === 'hi' ? 'कोई राइड नहीं मिली।' : 'No rides found under this category.'}
+              </Text>
             </View>
           }
           contentContainerStyle={styles.listContent}

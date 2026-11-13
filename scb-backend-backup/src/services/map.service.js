@@ -7,16 +7,23 @@ const ORS_BASE = 'https://api.openrouteservice.org';
 
 // Regional local directory for instant accurate matching
 const LOCAL_HUBS = [
+  { keywords: ['bodhwada', 'badwada'], lat: 22.1842, lng: 74.9654, label: 'Bodhwada, Madhya Pradesh' },
+  { keywords: ['borlay', 'borlai'], lat: 22.0360, lng: 75.0049, label: 'Borlay, Madhya Pradesh' },
+  { keywords: ['manawar'], lat: 22.2333, lng: 75.0833, label: 'Manawar, Madhya Pradesh' },
+  { keywords: ['kukshi'], lat: 22.2024, lng: 74.7533, label: 'Kukshi, Madhya Pradesh' },
   { keywords: ['barwani', 'badwani'], lat: 22.0366, lng: 74.9031, label: 'Barwani, Madhya Pradesh' },
   { keywords: ['indore', 'rajwada', 'vijay nagar', 'palasia'], lat: 22.7196, lng: 75.8577, label: 'Indore, Madhya Pradesh' },
+  { keywords: ['rau'], lat: 22.6288, lng: 75.8087, label: 'Rau, Madhya Pradesh' },
   { keywords: ['sendhwa'], lat: 21.6833, lng: 75.0934, label: 'Sendhwa, Madhya Pradesh' },
   { keywords: ['khargone'], lat: 21.8236, lng: 75.6178, label: 'Khargone, Madhya Pradesh' },
   { keywords: ['khandwa'], lat: 21.8314, lng: 76.3498, label: 'Khandwa, Madhya Pradesh' },
   { keywords: ['dhamnod'], lat: 22.2198, lng: 75.4674, label: 'Dhamnod, Madhya Pradesh' },
+  { keywords: ['dhar'], lat: 22.6025, lng: 75.2997, label: 'Dhar, Madhya Pradesh' },
   { keywords: ['julwania'], lat: 21.8493, lng: 75.1274, label: 'Julwania, Madhya Pradesh' },
   { keywords: ['maheshwar'], lat: 22.1764, lng: 75.5861, label: 'Maheshwar, Madhya Pradesh' },
   { keywords: ['ujjain'], lat: 23.1765, lng: 75.7885, label: 'Ujjain, Madhya Pradesh' },
   { keywords: ['bhopal'], lat: 23.2599, lng: 77.4126, label: 'Bhopal, Madhya Pradesh' },
+  { keywords: ['jaipur'], lat: 26.9154, lng: 75.8189, label: 'Jaipur, Rajasthan' },
   { keywords: ['mumbai'], lat: 19.0760, lng: 72.8777, label: 'Mumbai, Maharashtra' },
   { keywords: ['delhi', 'new delhi', 'railway station'], lat: 28.6139, lng: 77.2090, label: 'New Delhi, Delhi' },
   { keywords: ['gurgaon', 'gurugram', 'cyber city'], lat: 28.4595, lng: 77.0266, label: 'Gurugram, Haryana' },

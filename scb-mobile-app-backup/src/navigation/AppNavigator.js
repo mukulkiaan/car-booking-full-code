@@ -1,8 +1,10 @@
 import React, { useContext } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { COLORS } from '../theme/colors';
 
 // Auth Screens
@@ -33,38 +35,131 @@ import ProfileScreen from '../screens/shared/ProfileScreen';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Premium Tab Bar Custom Style Helper
+// Tab Icon Helper
 const TabBarIcon = ({ text, focused }) => (
   <View style={styles.tabIconContainer}>
-    <Text style={[styles.tabIcon, { color: focused ? COLORS.primary : COLORS.textMuted }]}>
+    <Text style={[styles.tabIcon, { color: focused ? COLORS.primaryDark : COLORS.textMuted }]}>
       {text}
     </Text>
   </View>
 );
 
+// ── PREMIUM TOP HEADER MENU BAR ──
+function TopHeaderMenuBar({ state, descriptors, navigation }) {
+  const insets = useSafeAreaInsets();
+  const { user } = useContext(AuthContext);
+  const activeRoute = state.routes[state.index];
+  const activeOptions = descriptors[activeRoute.key]?.options || {};
+  const activeTitle = activeOptions.title || activeOptions.tabBarLabel || activeRoute.name;
+
+  return (
+    <View style={[styles.headerWrapper, { paddingTop: Math.max(insets?.top || 0, StatusBar.currentHeight || 0) + 4 }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.card} translucent={false} />
+
+      {/* Header Brand & Active Screen Pill */}
+      <View style={styles.headerTopRow}>
+        <View style={styles.brandRow}>
+          <Text style={styles.brandIcon}>🚖</Text>
+          <Text style={styles.brandTitle}>SafarSetu</Text>
+          {user?.role && (
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleBadgeText}>
+                {user.role === 'customer' ? 'RIDER' : user.role.toUpperCase()}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.activePill}>
+          <Text style={styles.activePillText} numberOfLines={1}>
+            {activeTitle}
+          </Text>
+        </View>
+      </View>
+
+      {/* Header Menu Buttons Bar */}
+      <View style={styles.tabsRow}>
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          const label =
+            options.tabBarLabel !== undefined
+              ? options.tabBarLabel
+              : options.title !== undefined
+              ? options.title
+              : route.name;
+
+          const isFocused = state.index === index;
+
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
+
+          const onLongPress = () => {
+            navigation.emit({
+              type: 'tabLongPress',
+              target: route.key,
+            });
+          };
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              accessibilityRole="button"
+              accessibilityState={isFocused ? { selected: true } : {}}
+              accessibilityLabel={options.tabBarAccessibilityLabel}
+              testID={options.tabBarButtonTestID}
+              onPress={onPress}
+              onLongPress={onLongPress}
+              style={[
+                styles.tabBtn,
+                isFocused && styles.tabBtnActive,
+              ]}
+              activeOpacity={0.7}
+            >
+              {options.tabBarIcon ? (
+                options.tabBarIcon({ focused: isFocused })
+              ) : null}
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  isFocused ? styles.tabBtnTextActive : styles.tabBtnTextInactive,
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {label}
+              </Text>
+              {isFocused && <View style={styles.tabActiveBar} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 // ── CUSTOMER FLOW ──
 function CustomerTabNavigator() {
+  const { t, locale } = useLanguage();
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
+      tabBar={(props) => <TopHeaderMenuBar {...props} />}
       screenOptions={{
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarStyle: {
-          backgroundColor: COLORS.card,
-          borderTopColor: COLORS.border,
-          height: 64,
-          paddingBottom: 10,
-          paddingTop: 8,
-        },
-        headerStyle: {
+        headerShown: false,
+        tabBarPosition: 'top',
+        sceneStyle: {
           backgroundColor: COLORS.background,
-          borderBottomColor: COLORS.border,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        headerTintColor: COLORS.text,
-        headerTitleStyle: {
-          fontWeight: '900',
+          paddingBottom: Math.max(insets.bottom, 12),
         },
       }}
     >
@@ -73,6 +168,7 @@ function CustomerTabNavigator() {
         component={CustomerDashboard}
         options={{
           title: 'SafarSetu',
+          tabBarLabel: locale === 'nimadi' ? 'होम' : locale === 'hi' ? 'होम' : 'Home',
           tabBarIcon: ({ focused }) => <TabBarIcon text="🚖" focused={focused} />,
         }}
       />
@@ -80,7 +176,8 @@ function CustomerTabNavigator() {
         name="BookRide"
         component={BookRideScreen}
         options={{
-          title: 'Book Ride',
+          title: t('nav.book_ride') || 'Book Ride',
+          tabBarLabel: t('nav.book_ride') || 'Book Ride',
           tabBarIcon: ({ focused }) => <TabBarIcon text="📍" focused={focused} />,
         }}
       />
@@ -88,7 +185,8 @@ function CustomerTabNavigator() {
         name="MyRides"
         component={MyRidesScreen}
         options={{
-          title: 'My Rides',
+          title: t('nav.my_rides') || 'My Rides',
+          tabBarLabel: t('nav.my_rides') || 'My Rides',
           tabBarIcon: ({ focused }) => <TabBarIcon text="📋" focused={focused} />,
         }}
       />
@@ -96,7 +194,8 @@ function CustomerTabNavigator() {
         name="Support"
         component={SupportScreen}
         options={{
-          title: 'Support',
+          title: t('nav.support') || 'Support',
+          tabBarLabel: t('nav.support') || 'Support',
           tabBarIcon: ({ focused }) => <TabBarIcon text="🎧" focused={focused} />,
         }}
       />
@@ -104,7 +203,8 @@ function CustomerTabNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          title: 'Profile',
+          title: locale === 'nimadi' ? 'प्रोफ़ाइल' : locale === 'hi' ? 'प्रोफ़ाइल' : 'Profile',
+          tabBarLabel: locale === 'nimadi' ? 'प्रोफ़ाइल' : locale === 'hi' ? 'प्रोफ़ाइल' : 'Profile',
           tabBarIcon: ({ focused }) => <TabBarIcon text="👤" focused={focused} />,
         }}
       />
@@ -135,24 +235,19 @@ const CustomerNavigator = () => (
 
 // ── DRIVER FLOW ──
 function DriverTabNavigator() {
+  const { t, locale } = useLanguage();
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
+      tabBar={(props) => <TopHeaderMenuBar {...props} />}
       screenOptions={{
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarStyle: {
-          backgroundColor: COLORS.card,
-          borderTopColor: COLORS.border,
-          height: 64,
-          paddingBottom: 10,
-          paddingTop: 8,
-        },
-        headerStyle: {
+        headerShown: false,
+        tabBarPosition: 'top',
+        sceneStyle: {
           backgroundColor: COLORS.background,
-          borderBottomColor: COLORS.border,
+          paddingBottom: Math.max(insets.bottom, 12),
         },
-        headerTintColor: COLORS.text,
-        headerTitleStyle: { fontWeight: '900' },
       }}
     >
       <Tab.Screen
@@ -160,6 +255,7 @@ function DriverTabNavigator() {
         component={DriverDashboard}
         options={{
           title: 'Safar Driver',
+          tabBarLabel: locale === 'nimadi' ? 'होम' : locale === 'hi' ? 'होम' : 'Home',
           tabBarIcon: ({ focused }) => <TabBarIcon text="🚖" focused={focused} />,
         }}
       />
@@ -167,7 +263,8 @@ function DriverTabNavigator() {
         name="My Jobs"
         component={DriverJobsScreen}
         options={{
-          title: 'My Jobs',
+          title: t('nav.my_jobs') || 'My Jobs',
+          tabBarLabel: t('nav.my_jobs') || 'My Jobs',
           tabBarIcon: ({ focused }) => <TabBarIcon text="💼" focused={focused} />,
         }}
       />
@@ -175,7 +272,8 @@ function DriverTabNavigator() {
         name="Earnings"
         component={DriverEarningsScreen}
         options={{
-          title: 'Earnings',
+          title: t('nav.earnings') || 'Earnings',
+          tabBarLabel: t('nav.earnings') || 'Earnings',
           tabBarIcon: ({ focused }) => <TabBarIcon text="💰" focused={focused} />,
         }}
       />
@@ -183,7 +281,8 @@ function DriverTabNavigator() {
         name="History"
         component={DriverHistoryScreen}
         options={{
-          title: 'History',
+          title: t('nav.history') || 'History',
+          tabBarLabel: t('nav.history') || 'History',
           tabBarIcon: ({ focused }) => <TabBarIcon text="🕐" focused={focused} />,
         }}
       />
@@ -191,7 +290,8 @@ function DriverTabNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          title: 'Profile',
+          title: locale === 'nimadi' ? 'प्रोफ़ाइल' : locale === 'hi' ? 'प्रोफ़ाइल' : 'Profile',
+          tabBarLabel: locale === 'nimadi' ? 'प्रोफ़ाइल' : locale === 'hi' ? 'प्रोफ़ाइल' : 'Profile',
           tabBarIcon: ({ focused }) => <TabBarIcon text="👤" focused={focused} />,
         }}
       />
@@ -222,24 +322,18 @@ const DriverNavigator = () => (
 
 // ── ADMIN FLOW ──
 function AdminTabNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
+      tabBar={(props) => <TopHeaderMenuBar {...props} />}
       screenOptions={{
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarStyle: {
-          backgroundColor: COLORS.card,
-          borderTopColor: COLORS.border,
-          height: 64,
-          paddingBottom: 10,
-          paddingTop: 8,
-        },
-        headerStyle: {
+        headerShown: false,
+        tabBarPosition: 'top',
+        sceneStyle: {
           backgroundColor: COLORS.background,
-          borderBottomColor: COLORS.border,
+          paddingBottom: Math.max(insets.bottom, 12),
         },
-        headerTintColor: COLORS.text,
-        headerTitleStyle: { fontWeight: '900' },
       }}
     >
       <Tab.Screen
@@ -247,6 +341,7 @@ function AdminTabNavigator() {
         component={AdminDashboard}
         options={{
           title: 'Admin Fleet',
+          tabBarLabel: 'Fleet',
           tabBarIcon: ({ focused }) => <TabBarIcon text="⚙️" focused={focused} />,
         }}
       />
@@ -255,6 +350,7 @@ function AdminTabNavigator() {
         component={ProfileScreen}
         options={{
           title: 'Profile',
+          tabBarLabel: 'Profile',
           tabBarIcon: ({ focused }) => <TabBarIcon text="👤" focused={focused} />,
         }}
       />
@@ -292,20 +388,20 @@ export default function AppNavigator() {
       {!token ? (
         // Auth Stack
         <>
-          <Stack.Screen name="Landing" component={LandingScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Landing" component={LandingScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
         </>
       ) : (
         // Role-Based Authenticated Stack
         <>
-          {user?.role === 'customer' && (
+          {(user?.role || '').toLowerCase() === 'customer' && (
             <Stack.Screen name="CustomerRoot" component={CustomerNavigator} />
           )}
-          {user?.role === 'driver' && (
+          {(user?.role || '').toLowerCase() === 'driver' && (
             <Stack.Screen name="DriverRoot" component={DriverNavigator} />
           )}
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+          {((user?.role || '').toLowerCase() === 'admin' || (user?.role || '').toLowerCase() === 'superadmin') && (
             <Stack.Screen name="AdminRoot" component={AdminNavigator} />
           )}
         </>
@@ -320,6 +416,106 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabIcon: {
-    fontSize: 22,
+    fontSize: 20,
+  },
+  headerWrapper: {
+    backgroundColor: COLORS.card,
+    borderBottomWidth: 1.5,
+    borderBottomColor: COLORS.border,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  brandIcon: {
+    fontSize: 20,
+  },
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: -0.3,
+  },
+  roleBadge: {
+    backgroundColor: 'rgba(217, 154, 54, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(217, 154, 54, 0.35)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  roleBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+    letterSpacing: 0.5,
+  },
+  activePill: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    maxWidth: 140,
+  },
+  activePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+    paddingTop: 2,
+  },
+  tabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 2,
+    borderRadius: 8,
+    marginHorizontal: 2,
+  },
+  tabBtnActive: {
+    backgroundColor: 'rgba(217, 154, 54, 0.12)',
+  },
+  tabBtnText: {
+    fontSize: 10.5,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  tabBtnTextActive: {
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+  },
+  tabBtnTextInactive: {
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  tabActiveBar: {
+    height: 2.5,
+    width: '60%',
+    backgroundColor: COLORS.primaryDark,
+    borderRadius: 2,
+    marginTop: 3,
   },
 });

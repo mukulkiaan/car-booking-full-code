@@ -53,13 +53,20 @@ export default function LandingScreen({ navigation }) {
         
         {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.logoText}>SAFAR<Text style={styles.logoBold}>SETU</Text></Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Image
+              source={require('../../../assets/logo.png')}
+              style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: COLORS.border }}
+              resizeMode="contain"
+            />
+            <Text style={styles.logoText}>SAFAR<Text style={styles.logoBold}>SETU</Text></Text>
+          </View>
           
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.langBtn} onPress={toggleLanguage}>
-              <Ionicons name="globe-outline" size={18} color={COLORS.text} />
+            <TouchableOpacity style={styles.langBtn} onPress={toggleLanguage} activeOpacity={0.8}>
+              <Ionicons name="globe-outline" size={16} color={COLORS.text} />
               <Text style={styles.langText}>
-                {locale === 'en' ? 'EN' : locale === 'hi' ? 'हिं' : 'निम'}
+                {locale === 'en' ? 'EN' : locale === 'hi' ? 'HI' : 'NIM'}
               </Text>
             </TouchableOpacity>
 
@@ -278,21 +285,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   langBtn: {
-    flexDirection: 'row',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    flexDirection: 'column',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
+    justifyContent: 'center',
+    borderWidth: 1.5,
     borderColor: COLORS.border,
     marginRight: 10,
-    backgroundColor: COLORS.card,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   langText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 4,
-    color: COLORS.text,
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+    marginTop: 1,
   },
   loginBtn: {
     paddingHorizontal: 12,

@@ -5,7 +5,7 @@ import { authMiddleware } from '../auth.js';
 
 const router = Router();
 
-router.use(authMiddleware(['ADMIN']));
+router.use(authMiddleware(['ADMIN', 'SUPERADMIN']));
 
 function driverRow(user) {
   const p = user.driverProfile;
@@ -22,6 +22,7 @@ function driverRow(user) {
     licensePhoto: p?.licensePhotoUrl || 'https://placehold.co/120x80?text=License',
     approvalStatus: p?.approvalStatus === 'APPROVED' ? 'Approved' : p?.approvalStatus === 'REJECTED' ? 'Rejected' : 'Pending',
     status: p?.workStatus === 'BUSY' ? 'Busy' : 'Available',
+    createdAt: user.createdAt,
   };
 }
 
@@ -36,6 +37,7 @@ function customerRow(user) {
     totalRides: 0,
     spent: 0,
     status: user.deleted ? 'Suspended' : 'Active',
+    createdAt: user.createdAt,
   };
 }
 
@@ -228,7 +230,7 @@ router.delete('/customers/:userId', async (req, res) => {
 });
 
 router.get('/cars', async (_req, res) => {
-  const cars = await prisma.carCategory.findMany({ orderBy: { sortOrder: 'asc' } });
+  const cars = await prisma.carCategory.findMany({ orderBy: { id: 'desc' } });
   res.json(
     cars.map((c) => ({
       id: c.id,
@@ -238,13 +240,14 @@ router.get('/cars', async (_req, res) => {
       seats: c.seats,
       image: c.image,
       eta: c.eta,
+      commissionPercent: Number(c.commissionPercent ?? 12.0),
       availability: 'Live',
     })),
   );
 });
 
 router.post('/cars', async (req, res) => {
-  const { name, type, pricePerKm, seats, image, eta } = req.body;
+  const { name, type, pricePerKm, seats, image, eta, commissionPercent } = req.body;
   if (!name || !type || !pricePerKm || !seats) {
     return res.status(400).json({ message: 'Missing fields' });
   }
@@ -256,22 +259,59 @@ router.post('/cars', async (req, res) => {
       seats: Number(seats),
       image: image || 'https://placehold.co/200x100?text=New+Car',
       eta: eta || '5 mins',
+      commissionPercent: commissionPercent !== undefined ? Number(commissionPercent) : 12.0,
     }
   });
   res.status(201).json({
-    id: c.id, name: c.name, type: c.type, pricePerKm: c.pricePerKm, seats: c.seats, image: c.image, eta: c.eta, availability: 'Live'
+    id: c.id,
+    name: c.name,
+    type: c.type,
+    pricePerKm: c.pricePerKm,
+    seats: c.seats,
+    image: c.image,
+    eta: c.eta,
+    commissionPercent: Number(c.commissionPercent ?? 12.0),
+    availability: 'Live',
   });
 });
 
+router.patch('/cars/commissions/bulk', async (req, res) => {
+  try {
+    const { commissions } = req.body; // [{ id, commissionPercent }]
+    if (!Array.isArray(commissions)) {
+      return res.status(400).json({ message: 'commissions must be an array' });
+    }
+    const updates = await Promise.all(
+      commissions.map(async (item) => {
+        if (!item) return null;
+        const val = Number(item.commissionPercent);
+        if (isNaN(val) || val < 0 || val > 100) return null;
+        if (item.id) {
+          return prisma.carCategory.update({
+            where: { id: Number(item.id) },
+            data: { commissionPercent: val },
+          });
+        }
+        return null;
+      })
+    );
+    res.json({ ok: true, updated: updates.filter(Boolean).length });
+  } catch (err) {
+    console.error('Bulk commission update error:', err);
+    res.status(500).json({ message: err.message || 'Failed to update commissions' });
+  }
+});
+
 router.patch('/cars/:id', async (req, res) => {
-  const { name, type, pricePerKm, seats, image, eta } = req.body;
+  const { name, type, pricePerKm, seats, image, eta, commissionPercent } = req.body;
   const data = {};
   if (name) data.name = name;
   if (type) data.type = type;
-  if (pricePerKm) data.pricePerKm = Number(pricePerKm);
-  if (seats) data.seats = Number(seats);
+  if (pricePerKm !== undefined) data.pricePerKm = Number(pricePerKm);
+  if (seats !== undefined) data.seats = Number(seats);
   if (image) data.image = image;
   if (eta) data.eta = eta;
+  if (commissionPercent !== undefined) data.commissionPercent = Number(commissionPercent);
 
   const c = await prisma.carCategory.update({
     where: { id: Number(req.params.id) },
@@ -285,6 +325,7 @@ router.patch('/cars/:id', async (req, res) => {
     seats: c.seats,
     image: c.image,
     eta: c.eta,
+    commissionPercent: Number(c.commissionPercent ?? 12.0),
     availability: 'Live',
   });
 });
@@ -297,21 +338,89 @@ router.delete('/cars/:id', async (req, res) => {
 });
 
 router.get('/payments', async (_req, res) => {
-  const rows = await prisma.payment.findMany({
-    where: { status: 'Completed' },
-    orderBy: { id: 'desc' }
-  });
-  res.json(
-    rows.map((p) => ({
-      id: p.id,
-      bookingId: p.bookingId || '',
-      customer: p.customerName,
-      amount: p.amount,
-      method: p.method,
-      status: p.status,
-      date: p.date,
-    })),
-  );
+  try {
+    // 1. Sync any COMPLETED bookings that don't have a payment record yet
+    const completedBookings = await prisma.booking.findMany({
+      where: { status: 'COMPLETED' },
+      include: { customer: true, driver: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    for (const b of completedBookings) {
+      const existing = await prisma.payment.findFirst({ where: { bookingId: b.id } });
+      if (!existing) {
+        const dateOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+        const formattedDate = b.createdAt
+          ? new Date(b.createdAt).toLocaleDateString('en-GB', dateOptions)
+          : 'Live';
+        await prisma.payment.create({
+          data: {
+            bookingId: b.id,
+            customerName: b.customer?.name || 'Customer',
+            amount: Number(b.fare) || 0,
+            method: 'Online',
+            status: 'Completed',
+            date: formattedDate,
+          },
+        });
+      }
+    }
+
+    // 2. Fetch all completed payments with booking, customer and driver details
+    const rows = await prisma.payment.findMany({
+      where: { status: 'Completed' },
+      include: {
+        booking: {
+          include: { customer: true, driver: true }
+        }
+      },
+      orderBy: { id: 'desc' }
+    });
+
+    // 3. Load car commission rates
+    const carCategories = await prisma.carCategory.findMany();
+    const commMap = {};
+    carCategories.forEach(c => {
+      const rate = Number(c.commissionPercent ?? 12.0);
+      if (c.name) commMap[c.name.trim().toLowerCase()] = rate;
+      if (c.type) commMap[c.type.trim().toLowerCase()] = rate;
+    });
+    const getRate = (carName) => {
+      if (!carName) return 12.0;
+      return commMap[String(carName).trim().toLowerCase()] ?? 12.0;
+    };
+
+    const results = rows.map((p) => {
+      const carName = p.booking?.carName || 'Standard';
+      const rate = getRate(carName);
+      const amount = Number(p.amount) || 0;
+      const adminCommission = Math.floor(amount * (rate / 100));
+      const driverPayout = amount - adminCommission;
+
+      return {
+        id: p.id,
+        bookingId: p.bookingId || String(p.id),
+        customer: p.customerName || p.booking?.customer?.name || 'Customer',
+        driverName: p.booking?.driver?.name || 'Assigned Driver',
+        carName: carName,
+        pickup: p.booking?.pickupText || '',
+        drop: p.booking?.dropText || '',
+        amount: amount,
+        adminCommission: adminCommission,
+        driverPayout: driverPayout,
+        commissionPercent: rate,
+        method: p.method || 'Online',
+        status: p.status,
+        date: p.date || (p.booking?.createdAt ? new Date(p.booking.createdAt).toLocaleDateString('en-GB') : '22 May 2026'),
+        rawDate: p.booking?.createdAt ? p.booking.createdAt : new Date().toISOString(),
+      };
+    });
+
+    res.json(results);
+  } catch (err) {
+    console.error('Admin /payments error:', err);
+    res.status(500).json({ message: 'Failed to load payments' });
+  }
 });
 
 router.get('/dashboard-stats', async (req, res) => {
@@ -319,9 +428,31 @@ router.get('/dashboard-stats', async (req, res) => {
     const allBookings = await prisma.booking.findMany({
       orderBy: { createdAt: 'desc' },
     });
+    const carCategories = await prisma.carCategory.findMany();
+    const commRateMap = {};
+    carCategories.forEach(c => {
+      const rate = Number(c.commissionPercent ?? 12.0);
+      if (c.name) commRateMap[c.name.trim().toLowerCase()] = rate;
+      if (c.type) commRateMap[c.type.trim().toLowerCase()] = rate;
+    });
+
+    const getCarCommRate = (carName) => {
+      if (!carName) return 12.0;
+      const key = String(carName).trim().toLowerCase();
+      return commRateMap[key] ?? 12.0;
+    };
+
     const completed = allBookings.filter(b => b.status === 'COMPLETED');
-    const dbCommissions = completed.reduce((sum, b) => sum + Math.floor((b.fare || 0) * 0.12), 0);
-    const driverPayouts = completed.reduce((sum, b) => sum + ((b.fare || 0) - Math.floor((b.fare || 0) * 0.12)), 0);
+    const dbCommissions = completed.reduce((sum, b) => {
+      const rate = getCarCommRate(b.carName);
+      return sum + Math.floor((Number(b.fare) || 0) * (rate / 100));
+    }, 0);
+    const driverPayouts = completed.reduce((sum, b) => {
+      const fare = Number(b.fare) || 0;
+      const rate = getCarCommRate(b.carName);
+      const comm = Math.floor(fare * (rate / 100));
+      return sum + (fare - comm);
+    }, 0);
 
     const approvedDrivers = await prisma.user.count({
       where: { role: 'DRIVER', driverProfile: { approvalStatus: 'APPROVED' } }
@@ -347,7 +478,8 @@ router.get('/dashboard-stats', async (req, res) => {
           const idx = dayIndex === 0 ? 6 : dayIndex - 1; // Mon -> 0, ..., Sun -> 6
           if (idx >= 0 && idx < 7) {
             const fare = Number(b.fare) || 0;
-            const comm = Math.floor(fare * 0.12);
+            const rate = getCarCommRate(b.carName);
+            const comm = Math.floor(fare * (rate / 100));
             revenueData[idx].revenue += fare;
             revenueData[idx].commission += comm;
             revenueData[idx].driverPay += (fare - comm);
@@ -392,6 +524,71 @@ router.get('/dashboard-stats', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ── ADMIN APP SETTINGS (DYNAMIC QR CODE, UPI ID & HELPLINES) ──
+router.get('/settings', async (_req, res) => {
+  try {
+    let settings = null;
+    try {
+      settings = await prisma.appSettings.findFirst();
+    } catch (_err) {}
+
+    return res.json({
+      qrCodeUrl: settings?.qrCodeUrl || null,
+      upiId: settings?.upiId || '9755339783@upi',
+      advanceAmount: settings?.advanceAmount || 200,
+      helpline1: settings?.helpline1 || '6261828036',
+      helpline2: settings?.helpline2 || '9755339783',
+    });
+  } catch (e) {
+    return res.json({
+      qrCodeUrl: null,
+      upiId: '9755339783@upi',
+      advanceAmount: 200,
+      helpline1: '6261828036',
+      helpline2: '9755339783',
+    });
+  }
+});
+
+router.patch('/settings', async (req, res) => {
+  try {
+    const { qrCodeUrl, upiId, advanceAmount, helpline1, helpline2 } = req.body;
+    let existing = null;
+    try {
+      existing = await prisma.appSettings.findFirst();
+    } catch (_err) {}
+
+    let updated;
+    if (existing) {
+      updated = await prisma.appSettings.update({
+        where: { id: existing.id },
+        data: {
+          ...(qrCodeUrl !== undefined ? { qrCodeUrl: qrCodeUrl ? String(qrCodeUrl) : null } : {}),
+          ...(upiId !== undefined ? { upiId: String(upiId) } : {}),
+          ...(advanceAmount !== undefined ? { advanceAmount: parseFloat(advanceAmount) || 200 } : {}),
+          ...(helpline1 !== undefined ? { helpline1: String(helpline1) } : {}),
+          ...(helpline2 !== undefined ? { helpline2: String(helpline2) } : {}),
+        },
+      });
+    } else {
+      updated = await prisma.appSettings.create({
+        data: {
+          id: 1,
+          qrCodeUrl: qrCodeUrl ? String(qrCodeUrl) : null,
+          upiId: upiId ? String(upiId) : '9755339783@upi',
+          advanceAmount: advanceAmount ? parseFloat(advanceAmount) : 200,
+          helpline1: helpline1 ? String(helpline1) : '6261828036',
+          helpline2: helpline2 ? String(helpline2) : '9755339783',
+        },
+      });
+    }
+    return res.json({ success: true, settings: updated });
+  } catch (e) {
+    console.error('UPDATE_ADMIN_SETTINGS_ERROR:', e);
+    return res.status(500).json({ message: 'Failed to update settings: ' + (e.message || 'Server error') });
   }
 });
 

@@ -5,7 +5,8 @@ import {
   FaThLarge, FaCar, FaUsers, FaMoneyBillWave, FaClock, 
   FaCheckCircle, FaTimesCircle, FaMapMarkedAlt, FaChevronRight,
   FaPhoneAlt, FaUserTie, FaWallet, FaChartBar, FaUserCircle, FaCreditCard, 
-  FaArrowUp, FaArrowDown, FaEye, FaEdit, FaTrash, FaPlus, FaMapMarkerAlt, FaLock, FaImage, FaIdCard, FaCamera, FaCalendarAlt, FaRoute
+  FaArrowUp, FaArrowDown, FaEye, FaEdit, FaTrash, FaPlus, FaMapMarkerAlt, FaLock, FaImage, FaIdCard, FaCamera, FaCalendarAlt, FaRoute,
+  FaPercentage, FaSlidersH
 } from 'react-icons/fa';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -82,8 +83,18 @@ const AdminDashboard = ({ activeTab }) => {
   const [adminCars, setAdminCars] = useState([]);
   const [payments, setPayments] = useState([]);
   const [showCarModal, setShowCarModal] = useState(false);
-  const [carForm, setCarForm] = useState({ id: null, name: '', type: '', pricePerKm: '', seats: '', eta: '', image: null });
+  const [carForm, setCarForm] = useState({ id: null, name: '', type: '', pricePerKm: '', seats: '', eta: '', image: null, commissionPercent: 12 });
+  const [bulkCommissions, setBulkCommissions] = useState({});
+  const [isSavingBulkComm, setIsSavingBulkComm] = useState(false);
   const [allBookings, setAllBookings] = useState([]);
+
+  // App Settings (QR Code, UPI, Helpline)
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [upiId, setUpiId] = useState('9755339783@upi');
+  const [advanceAmount, setAdvanceAmount] = useState('200');
+  const [helpline1, setHelpline1] = useState('6261828036');
+  const [helpline2, setHelpline2] = useState('9755339783');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const revenueData = useMemo(() => {
     if (dashboardStats?.revenueData?.length) {
@@ -207,6 +218,15 @@ const AdminDashboard = ({ activeTab }) => {
       setDrivers(Array.isArray(d) ? d : []);
       setCustomers(Array.isArray(c) ? c : []);
       setAdminCars(Array.isArray(carsData) ? carsData : []);
+      if (Array.isArray(carsData)) {
+        setBulkCommissions(prev => {
+          const next = { ...prev };
+          carsData.forEach(c => {
+            if (next[c.id] === undefined) next[c.id] = c.commissionPercent ?? 12;
+          });
+          return next;
+        });
+      }
       setPayments(Array.isArray(pay) ? pay : []);
       if (statsData) setDashboardStats(statsData);
     } catch (e) {
@@ -214,11 +234,86 @@ const AdminDashboard = ({ activeTab }) => {
     }
   };
 
+  // Fetch settings once on mount so polling doesn't overwrite admin's inputs
+  useEffect(() => {
+    api('/api/admin/settings').then(s => {
+      if (s) {
+        setQrCodeUrl(s.qrCodeUrl || '');
+        setUpiId(s.upiId || '9755339783@upi');
+        setAdvanceAmount(String(s.advanceAmount ?? '200'));
+        setHelpline1(s.helpline1 || '6261828036');
+        setHelpline2(s.helpline2 || '9755339783');
+      }
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadAll();
-    const t = setInterval(loadAll, 5000);
+    const t = setInterval(loadAll, 15000);
     return () => clearInterval(t);
   }, []);
+
+  const handleQrImageUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 600;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setQrCodeUrl(compressedDataUrl);
+          toast.success('QR Code image selected and optimized!');
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      setIsSavingSettings(true);
+      const res = await api('/api/admin/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          qrCodeUrl: qrCodeUrl ? qrCodeUrl.trim() : null,
+          upiId: upiId ? upiId.trim() : '9755339783@upi',
+          advanceAmount: parseFloat(advanceAmount) || 200,
+          helpline1: helpline1 ? helpline1.trim() : '6261828036',
+          helpline2: helpline2 ? helpline2.trim() : '9755339783',
+        }),
+      });
+      if (res?.settings) {
+        setQrCodeUrl(res.settings.qrCodeUrl || '');
+        setUpiId(res.settings.upiId || '9755339783@upi');
+        setAdvanceAmount(String(res.settings.advanceAmount ?? '200'));
+        setHelpline1(res.settings.helpline1 || '6261828036');
+        setHelpline2(res.settings.helpline2 || '9755339783');
+      }
+      toast.success('Admin QR Code & Helpline settings saved successfully!');
+    } catch (err) {
+      toast.error('Failed to save settings: ' + (err.message || 'Error'));
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   const [bookingForm, setBookingForm] = useState({ pickup: '', drop: '', fare: '', date: '', time: '' });
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -232,9 +327,31 @@ const AdminDashboard = ({ activeTab }) => {
     vehiclePhoto: null, licenseFront: null, licenseBack: null, password: '' 
   });
 
-  const totalCommissionsNum = dashboardStats?.totalCommissions ?? allBookings.filter(b => b.status === 'Completed').reduce((sum, b) => sum + Math.floor((b.fare || 0) * 0.12), 0);
+  const carCommissionMap = useMemo(() => {
+    const map = {};
+    adminCars.forEach((c) => {
+      const rate = Number(c.commissionPercent ?? 12);
+      if (c.name) map[c.name.trim().toLowerCase()] = rate;
+      if (c.type) map[c.type.trim().toLowerCase()] = rate;
+    });
+    return map;
+  }, [adminCars]);
+
+  const getCarCommissionRate = (carName) => {
+    if (!carName) return 12;
+    return carCommissionMap[String(carName).trim().toLowerCase()] ?? 12;
+  };
+
+  const totalCommissionsNum = dashboardStats?.totalCommissions ?? allBookings.filter(b => b.status === 'Completed').reduce((sum, b) => {
+    const rate = getCarCommissionRate(b.carName);
+    return sum + Math.floor((b.fare || 0) * (rate / 100));
+  }, 0);
   const walletBalanceNum = dashboardStats?.walletBalance ?? payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const driverPayoutsNum = dashboardStats?.driverPayouts ?? allBookings.filter(b => b.status === 'Completed').reduce((sum, b) => sum + ((b.fare || 0) - Math.floor((b.fare || 0) * 0.12)), 0);
+  const driverPayoutsNum = dashboardStats?.driverPayouts ?? allBookings.filter(b => b.status === 'Completed').reduce((sum, b) => {
+    const rate = getCarCommissionRate(b.carName);
+    const comm = Math.floor((b.fare || 0) * (rate / 100));
+    return sum + ((b.fare || 0) - comm);
+  }, 0);
 
   const stats = [
     { label: t('nav.bookings'), value: dashboardStats?.totalBookings ?? allBookings.length, icon: <FaClock />, color: "text-blue-500", trend: "+100%" },
@@ -469,16 +586,20 @@ const AdminDashboard = ({ activeTab }) => {
   const handleSaveCar = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...carForm,
+        commissionPercent: Number(carForm.commissionPercent !== undefined ? carForm.commissionPercent : 12),
+      };
       if (modalMode === 'add') {
         await api('/api/admin/cars', {
           method: 'POST',
-          body: JSON.stringify(carForm),
+          body: JSON.stringify(payload),
         });
         toast.success('Vehicle added successfully');
       } else {
         await api(`/api/admin/cars/${carForm.id}`, {
           method: 'PATCH',
-          body: JSON.stringify(carForm),
+          body: JSON.stringify(payload),
         });
         toast.success('Vehicle updated successfully');
       }
@@ -486,6 +607,26 @@ const AdminDashboard = ({ activeTab }) => {
       setShowCarModal(false);
     } catch (err) {
       toast.error(err.message || 'Save failed');
+    }
+  };
+
+  const handleSaveBulkCommissions = async () => {
+    setIsSavingBulkComm(true);
+    try {
+      const list = Object.entries(bulkCommissions).map(([id, val]) => ({
+        id: Number(id),
+        commissionPercent: Number(val),
+      }));
+      await api('/api/admin/cars/commissions/bulk', {
+        method: 'PATCH',
+        body: JSON.stringify({ commissions: list }),
+      });
+      await loadAll();
+      toast.success('Fleet commission rates updated successfully!');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update commissions');
+    } finally {
+      setIsSavingBulkComm(false);
     }
   };
 
@@ -816,23 +957,79 @@ const AdminDashboard = ({ activeTab }) => {
                   </div>
                 )}
 
-                <div className="mt-auto">
-                  <div className="flex justify-between pt-6 border-t border-border mb-6">
-                    <div><p className="text-[9px] text-muted uppercase font-black">{t('admin.total_paid')}</p><p className="text-xl font-black text-dark">₹{booking.fare}</p></div>
-                    <div className="text-center"><p className="text-[9px] text-primary uppercase font-black">{t('admin.commission')}</p><p className="text-primary font-black">₹{Math.floor(booking.fare * 0.12)}</p></div>
-                    <div className="text-right"><p className="text-[9px] text-green-600 uppercase font-black">{t('admin.driver_payout_label')}</p><p className="text-green-600 font-black text-xl">₹{booking.fare - Math.floor(booking.fare * 0.12)}</p></div>
-                  </div>
+                {(() => {
+                  const distNum = parseFloat(String(booking.distance || '').replace(/[^0-9.]/g, '')) || (booking.fare ? Math.round(booking.fare / 12) : 50);
+                  const carRate = 12;
+                  const oneWayBase = Math.round(distNum * carRate);
+                  const doubleFare = oneWayBase * 2;
+                  const roundTripKm = Math.round(distNum * 2);
+                  const estToll = distNum >= 30 ? Math.round((distNum * 3.2) / 10) * 10 : 0;
+                  const totalAdminQuote = doubleFare + estToll;
+                  const commPercent = getCarCommissionRate(booking.carName || booking.car);
+                  const adminProfit = Math.round(doubleFare * (commPercent / 100));
+                  const driverPayout = totalAdminQuote - adminProfit;
 
-                  <div className="grid grid-cols-2 gap-3">
-                    {booking.status === 'Pending' ? (
-                      <button onClick={() => { setSelectedBooking(booking); setShowAssignModal(true); }} className="col-span-2 btn-primary py-4 text-xs uppercase font-black shadow-lg shadow-primary/20">{t('admin.assign_driver')}</button>
-                    ) : (
-                      <button onClick={() => handleEditBooking(booking)} className="col-span-2 bg-green-500 text-dark py-4 rounded-xl text-xs font-black uppercase hover:bg-green-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"><FaEdit /> {t('admin.update_booking')}</button>
-                    )}
-                    <button onClick={() => { setSelectedBooking(booking); setShowMapModal(true); }} className="bg-dark/5 py-4 rounded-xl text-xs font-black uppercase hover:bg-dark/10 transition-all flex items-center justify-center gap-2 text-dark border border-border"><FaMapMarkedAlt /> {t('admin.map')}</button>
-                    <button onClick={() => handleCancelBooking(booking.id)} className="bg-red-500/10 text-red-500 py-4 rounded-xl text-xs font-black uppercase hover:bg-red-500 hover:text-white transition-all border border-red-500/20">{t('booking.cancel_request')}</button>
-                  </div>
-                </div>
+                  return (
+                    <div className="mt-auto pt-4 border-t border-border">
+                      {/* 2X Outstation Quote & Toll Box */}
+                      <div className="bg-primary/10 border-2 border-primary/40 rounded-2xl p-4 mb-4 space-y-2.5 shadow-sm">
+                        <div className="flex justify-between items-center pb-2 border-b border-primary/20">
+                          <span className="text-[10px] font-black uppercase text-dark flex items-center gap-1.5">
+                            🚕 2X RETURN FARE & TOLL QUOTE
+                          </span>
+                          <span className="text-[9px] font-black uppercase bg-primary text-dark px-2 py-0.5 rounded shadow-sm">
+                            TELL CUSTOMER ON CALL
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-muted text-[10px] uppercase font-bold block">1-Way Distance:</span>
+                            <strong className="text-dark font-black">{distNum} KM</strong>
+                          </div>
+                          <div>
+                            <span className="text-muted text-[10px] uppercase font-bold block">2-Way Billable (2X):</span>
+                            <strong className="text-dark font-black">{roundTripKm} KM</strong>
+                          </div>
+                          <div>
+                            <span className="text-muted text-[10px] uppercase font-bold block">Double Base Fare (2X):</span>
+                            <strong className="text-dark font-black">₹{doubleFare.toLocaleString('en-IN')}</strong>
+                          </div>
+                          <div>
+                            <span className="text-muted text-[10px] uppercase font-bold block">Est. Highway Toll:</span>
+                            <strong className="text-blue-700 font-black">₹{estToll.toLocaleString('en-IN')}</strong>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-primary/20 flex justify-between items-center">
+                          <div>
+                            <span className="text-[9px] font-black uppercase text-muted block">Total Quote to Tell Customer:</span>
+                            <p className="text-2xl font-black text-dark leading-none">₹{totalAdminQuote.toLocaleString('en-IN')}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] font-black uppercase text-primary block">Your Profit ({commPercent}%):</span>
+                            <p className="text-base font-black text-primary leading-none">₹{adminProfit.toLocaleString('en-IN')}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs pb-3 text-muted">
+                        <span>Driver Payout (Base - Comm + Toll):</span>
+                        <strong className="text-green-600 font-black text-sm">₹{driverPayout.toLocaleString('en-IN')}</strong>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {booking.status === 'Pending' ? (
+                          <button onClick={() => { setSelectedBooking(booking); setShowAssignModal(true); }} className="col-span-2 btn-primary py-4 text-xs uppercase font-black shadow-lg shadow-primary/20">{t('admin.assign_driver')}</button>
+                        ) : (
+                          <button onClick={() => handleEditBooking(booking)} className="col-span-2 bg-green-500 text-dark py-4 rounded-xl text-xs font-black uppercase hover:bg-green-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"><FaEdit /> {t('admin.update_booking')}</button>
+                        )}
+                        <button onClick={() => { setSelectedBooking(booking); setShowMapModal(true); }} className="bg-dark/5 py-4 rounded-xl text-xs font-black uppercase hover:bg-dark/10 transition-all flex items-center justify-center gap-2 text-dark border border-border"><FaMapMarkedAlt /> {t('admin.map')}</button>
+                        <button onClick={() => handleCancelBooking(booking.id)} className="bg-red-500/10 text-red-500 py-4 rounded-xl text-xs font-black uppercase hover:bg-red-500 hover:text-white transition-all border border-red-500/20">{t('booking.cancel_request')}</button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
             </div>
@@ -951,11 +1148,14 @@ const AdminDashboard = ({ activeTab }) => {
         {activeTab === 'Cars' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className="flex justify-between items-center bg-dark/5 p-4 rounded-2xl border border-border">
-              <h3 className="text-xl font-black italic uppercase tracking-tighter text-dark">{t('admin.manage_vehicles')}</h3>
+              <div>
+                <h3 className="text-xl font-black italic uppercase tracking-tighter text-dark">{t('admin.manage_vehicles')}</h3>
+                <p className="text-xs text-muted font-bold">Configure rates, passenger capacity, and vehicle-specific commission rates</p>
+              </div>
               <button 
                 onClick={() => {
                   setModalMode('add');
-                  setCarForm({ id: null, name: '', type: '', pricePerKm: '', seats: '', eta: '5 mins', image: null });
+                  setCarForm({ id: null, name: '', type: '', pricePerKm: '', seats: '', eta: '5 mins', image: null, commissionPercent: 12 });
                   setShowCarModal(true);
                 }} 
                 className="btn-primary px-4 py-2 flex items-center gap-2 font-black uppercase tracking-widest text-xs"
@@ -963,6 +1163,67 @@ const AdminDashboard = ({ activeTab }) => {
                 <FaPlus /> {t('admin.add_vehicle')}
               </button>
             </div>
+
+            {/* ── FLEET COMMISSION CONFIGURATION PANEL ── */}
+            <div className="glass-card p-5 sm:p-6 border-primary/30 bg-primary/5 rounded-3xl">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <div>
+                  <h4 className="text-base sm:text-lg font-black uppercase italic tracking-tighter text-dark flex items-center gap-2">
+                    <FaPercentage className="text-primary" /> Vehicle-Wise Commission Settings
+                  </h4>
+                  <p className="text-xs text-muted font-bold">
+                    Set specific commission (%) for each vehicle category. Driver payout & platform revenue update live automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveBulkCommissions}
+                  disabled={isSavingBulkComm}
+                  className="btn-primary px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-primary/20 flex items-center gap-2 self-stretch sm:self-auto justify-center"
+                >
+                  <FaSlidersH /> {isSavingBulkComm ? 'Saving...' : 'Save All Commissions'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {adminCars.map((car) => {
+                  const currentVal = bulkCommissions[car.id] !== undefined ? bulkCommissions[car.id] : (car.commissionPercent ?? 12);
+                  const driverShare = Math.max(0, 100 - Number(currentVal || 0));
+                  return (
+                    <div key={car.id} className="bg-surface p-3.5 rounded-2xl border border-border/80 shadow-sm flex flex-col justify-between hover:border-primary/40 transition-all">
+                      <div className="flex items-center gap-2 mb-2.5">
+                        <div className="w-10 h-8 bg-dark/5 rounded-lg flex items-center justify-center p-1 shrink-0">
+                          <img src={car.image} alt={car.name} className="w-full h-full object-contain" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-dark truncate">{car.name}</p>
+                          <p className="text-[10px] text-primary font-black">₹{car.pricePerKm}/km</p>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1 bg-dark/5 px-2 py-1.5 rounded-xl border border-border">
+                          <span className="text-[10px] text-muted font-bold">Comm:</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max="100"
+                            value={currentVal}
+                            onChange={(e) => setBulkCommissions({ ...bulkCommissions, [car.id]: e.target.value })}
+                            className="w-full bg-transparent text-right font-black text-sm text-dark focus:outline-none"
+                          />
+                          <span className="text-xs font-black text-primary">%</span>
+                        </div>
+                        <p className="text-[9px] text-muted font-bold text-center mt-1.5">
+                          Driver: <span className="text-green-600 font-black">{driverShare}%</span>
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <AdminListToolbar
               search={carSearch}
               onSearchChange={setCarSearch}
@@ -988,16 +1249,26 @@ const AdminDashboard = ({ activeTab }) => {
                   <img src={car.image} alt={car.name} className="w-24 sm:w-40 h-40 object-contain mx-auto mb-4 sm:mb-6 group-hover:scale-110 transition-all duration-500" />
                   <h4 className="text-lg sm:text-2xl font-black mb-1 sm:mb-2 text-foreground">{car.name}</h4>
                   <p className="text-[9px] sm:text-[10px] text-muted uppercase font-black tracking-widest mb-3 sm:mb-6">{car.type} • {car.seats} {t('cars.seats')}</p>
-                  <div className="bg-muted/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-border mb-3 sm:mb-6 text-left">
+                  <div className="bg-muted/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-border mb-3 sm:mb-6 text-left space-y-1.5">
                     <div className="flex justify-between items-center">
                       <span className="text-[9px] sm:text-[10px] text-muted uppercase font-bold">{t('admin.rate')}</span>
                       <span className="text-primary font-black text-sm">₹{car.pricePerKm}{t('cars.per_km')}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1.5 border-t border-border/40">
+                      <span className="text-[9px] sm:text-[10px] text-muted uppercase font-bold">Commission</span>
+                      <span className="text-green-600 font-black text-xs bg-green-500/10 px-2 py-0.5 rounded-md">
+                        {car.commissionPercent ?? 12}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[9px] text-muted font-bold">
+                      <span>Driver Payout</span>
+                      <span className="text-dark font-black">{100 - Number(car.commissionPercent ?? 12)}%</span>
                     </div>
                   </div>
                   <button 
                     onClick={() => {
                       setModalMode('edit');
-                      setCarForm({ ...car });
+                      setCarForm({ ...car, commissionPercent: car.commissionPercent ?? 12 });
                       setShowCarModal(true);
                     }}
                     className="w-full py-3 bg-muted/10 hover:bg-primary hover:text-background rounded-xl text-xs font-black uppercase transition-all border border-border"
@@ -1035,7 +1306,7 @@ const AdminDashboard = ({ activeTab }) => {
                       <div className="flex items-center gap-12 text-right">
                         <div className="hidden lg:block">
                           <p className="text-[9px] text-muted uppercase font-black">{t('admin.split')}</p>
-                          <p className="text-xs text-foreground font-bold">{t('admin.split_detail', { admin: Math.floor(p.amount * 0.12), driver: p.amount - Math.floor(p.amount * 0.12) })}</p>
+                          <p className="text-xs text-foreground font-bold">{t('admin.split_detail', { admin: Math.floor(p.amount * (getCarCommissionRate(p.carName) / 100)), driver: p.amount - Math.floor(p.amount * (getCarCommissionRate(p.carName) / 100)) })}</p>
                         </div>
                         <div>
                           <p className="text-2xl font-black text-primary">₹{p.amount}</p>
@@ -1106,6 +1377,129 @@ const AdminDashboard = ({ activeTab }) => {
                   </div>
                 </div>
              </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'Settings' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-3xl mx-auto space-y-6">
+            <div className="glass-card p-6 sm:p-8 border border-border">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+                <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary text-2xl font-black">
+                  ⚙️
+                </div>
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-dark">
+                    UPI QR Code & Advance Booking Settings
+                  </h3>
+                  <p className="text-xs text-muted font-bold">
+                    Configure customer advance token payment QR code, UPI ID, and 24x7 helpline numbers.
+                  </p>
+                </div>
+              </div>
+
+              {/* QR Preview & Upload */}
+              <div className="bg-dark/5 p-6 rounded-2xl border border-border flex flex-col items-center justify-center text-center mb-6">
+                <div className="w-48 h-48 bg-white p-3 rounded-2xl shadow-md border border-border mb-3 flex items-center justify-center">
+                  <img
+                    src={qrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`upi://pay?pa=${upiId || '9755339783@upi'}&pn=SafarSetu&am=${advanceAmount || 200}&cu=INR`)}`}
+                    alt="SafarSetu UPI QR Code"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <p className="text-xs font-bold text-dark mb-1">
+                  {qrCodeUrl ? 'Custom Admin Uploaded QR Code' : 'Dynamic Auto-Generated UPI QR Code'}
+                </p>
+                <p className="text-[11px] text-muted">
+                  Scanned by customers during booking to pay ₹{advanceAmount || 200} advance
+                </p>
+
+                <div className="mt-4 flex items-center gap-3">
+                  <label className="btn-primary px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer shadow-md shadow-primary/20 hover:scale-105 transition-all">
+                    <span>Upload QR Image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleQrImageUpload}
+                    />
+                  </label>
+                  {qrCodeUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setQrCodeUrl('')}
+                      className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold rounded-xl transition-all"
+                    >
+                      Reset to Default QR
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Form Fields */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black uppercase text-dark mb-1.5 tracking-wider">
+                    Admin UPI ID (GPay / PhonePe / Paytm / BHIM)
+                  </label>
+                  <input
+                    type="text"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    placeholder="e.g. 9755339783@upi"
+                    className="w-full bg-white border border-border rounded-xl px-4 py-3 text-sm font-bold text-dark focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black uppercase text-dark mb-1.5 tracking-wider">
+                    Advance Token Amount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={advanceAmount}
+                    onChange={(e) => setAdvanceAmount(e.target.value)}
+                    placeholder="200"
+                    className="w-full bg-white border border-border rounded-xl px-4 py-3 text-sm font-bold text-dark focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black uppercase text-dark mb-1.5 tracking-wider">
+                      Primary Helpline (Call & WhatsApp)
+                    </label>
+                    <input
+                      type="text"
+                      value={helpline1}
+                      onChange={(e) => setHelpline1(e.target.value)}
+                      placeholder="6261828036"
+                      className="w-full bg-white border border-border rounded-xl px-4 py-3 text-sm font-bold text-dark focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black uppercase text-dark mb-1.5 tracking-wider">
+                      Secondary Helpline (Call)
+                    </label>
+                    <input
+                      type="text"
+                      value={helpline2}
+                      onChange={(e) => setHelpline2(e.target.value)}
+                      placeholder="9755339783"
+                      className="w-full bg-white border border-border rounded-xl px-4 py-3 text-sm font-bold text-dark focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveSettings}
+                  disabled={isSavingSettings}
+                  className="w-full mt-4 btn-primary py-4 rounded-xl font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/25 hover:scale-[1.01] transition-all flex items-center justify-center gap-2"
+                >
+                  {isSavingSettings ? 'Saving Settings...' : 'Save QR Code & Helpline Settings'}
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -1325,7 +1719,37 @@ const AdminDashboard = ({ activeTab }) => {
                     <div className="relative"><FaUsers className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" /><input type="number" placeholder="Seats" value={carForm.seats || ''} onChange={e => setCarForm({...carForm, seats: e.target.value})} className="input-field pl-12" required /></div>
                     <div className="relative"><FaMoneyBillWave className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" /><input type="number" placeholder="Rate /km" value={carForm.pricePerKm || ''} onChange={e => setCarForm({...carForm, pricePerKm: e.target.value})} className="input-field pl-12" required /></div>
                   </div>
-                  <div className="relative"><FaClock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" /><input type="text" placeholder="ETA (e.g. 5 mins)" value={carForm.eta || ''} onChange={e => setCarForm({...carForm, eta: e.target.value})} className="input-field pl-12" required /></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="relative">
+                      <FaClock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+                      <input 
+                        type="text" 
+                        placeholder="ETA (e.g. 5 mins)" 
+                        value={carForm.eta || ''} 
+                        onChange={e => setCarForm({...carForm, eta: e.target.value})} 
+                        className="input-field pl-12" 
+                        required 
+                      />
+                    </div>
+                    <div className="relative">
+                      <FaPercentage className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500" />
+                      <input 
+                        type="number" 
+                        step="0.5" 
+                        min="0" 
+                        max="100" 
+                        placeholder="Commission %" 
+                        value={carForm.commissionPercent !== undefined ? carForm.commissionPercent : 12} 
+                        onChange={e => setCarForm({...carForm, commissionPercent: e.target.value})} 
+                        className="input-field pl-12 border-amber-500/30 focus:border-amber-500 font-bold" 
+                        required 
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 text-amber-400">
+                    <span className="font-bold flex items-center gap-1.5"><FaSlidersH className="text-amber-500" /> Split Ratio:</span>
+                    <span>Admin: <strong className="text-amber-300">{Number(carForm.commissionPercent ?? 12)}%</strong> | Driver: <strong className="text-emerald-400">{(100 - Number(carForm.commissionPercent ?? 12)).toFixed(1)}%</strong></span>
+                  </div>
                   
                   <div className="space-y-2">
                     <p className="text-[10px] text-muted uppercase font-black tracking-widest">Vehicle Image</p>

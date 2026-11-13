@@ -2,8 +2,15 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../prisma.js';
 import { authMiddleware } from '../auth.js';
-import { bookingToJson, STATUS_FROM_UI } from '../formatters.js';
+import { bookingToJson, STATUS_FROM_UI, getBookingOtp } from '../formatters.js';
 import { resolveRoute } from '../services/map.service.js';
+import {
+  notifyAdminNewBooking,
+  notifyAdminAdvancePayment,
+  notifyDriverNewAssignment,
+  notifyCustomerDriverAssigned,
+  notifyCustomerTripStatus,
+} from '../services/notification.service.js';
 
 const router = Router();
 
@@ -96,6 +103,10 @@ router.post('/', authMiddleware(['CUSTOMER']), async (req, res) => {
       },
       include: includeBooking,
     });
+
+    // Notify Admin of new booking creation
+    notifyAdminNewBooking(booking, booking.customer?.name);
+
     return res.status(201).json(bookingToJson(booking));
   } catch (e) {
     console.error(e);
@@ -152,15 +163,31 @@ router.post('/admin', authMiddleware(['ADMIN']), async (req, res) => {
   }
 });
 
-router.patch('/:id', authMiddleware(['ADMIN', 'DRIVER']), async (req, res) => {
+router.patch('/:id', authMiddleware(['ADMIN', 'DRIVER', 'CUSTOMER']), async (req, res) => {
   try {
     const { id } = req.params;
     const booking = await prisma.booking.findUnique({ where: { id }, include: includeBooking });
     if (!booking) return res.status(404).json({ message: 'Not found' });
 
+    // Customer cancellation
+    if (req.auth.role === 'CUSTOMER') {
+      if (booking.customerId !== req.auth.sub) {
+        return res.status(403).json({ message: 'Not your ride request' });
+      }
+      if (booking.status === 'COMPLETED') {
+        return res.status(400).json({ message: 'Cannot cancel a completed ride' });
+      }
+      const updated = await prisma.booking.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+        include: includeBooking,
+      });
+      return res.json(bookingToJson(updated));
+    }
+
     if (req.auth.role === 'DRIVER') {
       if (booking.driverId !== req.auth.sub) return res.status(403).json({ message: 'Not your ride' });
-      if (req.body.action === 'accept' && booking.status === 'ASSIGNED') {
+      if ((req.body.action === 'accept' || req.body.status === 'Accepted') && (booking.status === 'ASSIGNED' || booking.status === 'PENDING')) {
         const updated = await prisma.booking.update({
           where: { id },
           data: { status: 'ACCEPTED' },
@@ -168,12 +195,40 @@ router.patch('/:id', authMiddleware(['ADMIN', 'DRIVER']), async (req, res) => {
         });
         return res.json(bookingToJson(updated));
       }
-      if (req.body.action === 'complete' && booking.status === 'ACCEPTED') {
+      if (req.body.action === 'complete' || req.body.action === 'verify_otp' || req.body.status === 'Completed') {
+        if (req.body.otp) {
+          const expectedOtp = getBookingOtp(booking.id);
+          if (String(req.body.otp).trim() !== expectedOtp) {
+            return res.status(400).json({ message: 'Invalid Customer OTP. Please ask customer for the correct 4-digit Ride OTP.' });
+          }
+        }
         const updated = await prisma.booking.update({
           where: { id },
           data: { status: 'COMPLETED' },
           include: includeBooking,
         });
+
+        // Ensure Payment record is immediately created for Admin and Driver logs
+        try {
+          const existingPay = await prisma.payment.findFirst({ where: { bookingId: id } });
+          if (!existingPay) {
+            const dateOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+            const formattedDate = new Date().toLocaleDateString('en-GB', dateOptions);
+            await prisma.payment.create({
+              data: {
+                bookingId: id,
+                customerName: updated.customer?.name || 'Customer',
+                amount: Number(updated.fare) || 0,
+                method: 'Online',
+                status: 'Completed',
+                date: formattedDate
+              }
+            });
+          }
+        } catch (payErr) {
+          console.error('Auto payment creation error on trip completion:', payErr);
+        }
+
         return res.json(bookingToJson(updated));
       }
       return res.status(400).json({ message: 'Invalid driver update' });
@@ -226,6 +281,14 @@ router.patch('/:id', authMiddleware(['ADMIN', 'DRIVER']), async (req, res) => {
           }
         });
       }
+    }
+
+    // Trigger Notifications for Driver & Customer
+    if (req.body.driverId) {
+      notifyDriverNewAssignment(req.body.driverId, updated);
+      notifyCustomerDriverAssigned(updated, updated.driver?.name, updated.driver?.driverProfile?.vehicleNumber);
+    } else if (updated.status !== prevStatus) {
+      notifyCustomerTripStatus(updated.customerId, updated.id, updated.status);
     }
 
     return res.json(bookingToJson(updated));
@@ -294,6 +357,37 @@ router.get('/driver-stats', authMiddleware(['DRIVER']), async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ── CUSTOMER ADVANCE BOOKING PAYMENT SUBMISSION ──
+router.post('/:id/advance-payment', authMiddleware(['CUSTOMER']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { advanceAmount, utr } = req.body;
+    const booking = await prisma.booking.findUnique({ where: { id }, include: includeBooking });
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    if (booking.customerId !== req.auth.sub) {
+      return res.status(403).json({ message: 'Not your booking' });
+    }
+
+    const updated = await prisma.booking.update({
+      where: { id },
+      data: {
+        advancePaid: advanceAmount ? Number(advanceAmount) : 200,
+        advanceStatus: 'PAID',
+        advanceUtr: utr ? String(utr).trim() : 'SUBMITTED_ONLINE',
+      },
+      include: includeBooking,
+    });
+
+    // Notify Admin of advance payment receipt
+    notifyAdminAdvancePayment(updated);
+
+    return res.json({ success: true, booking: bookingToJson(updated) });
+  } catch (e) {
+    console.error('ADVANCE_PAY_ERROR:', e);
+    return res.status(500).json({ message: 'Failed to record advance payment' });
   }
 });
 

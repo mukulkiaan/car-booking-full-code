@@ -14,51 +14,80 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
+import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
 
 const { width, height } = Dimensions.get('window');
 
-// Popular Indian cities with coordinates (MP focus + major cities)
+// Popular Indian cities & local hubs with coordinates (Nimar / MP focus + major cities)
 const POPULAR_CITIES = [
-  { name: 'Indore', state: 'MP', lat: 22.7196, lng: 75.8577 },
-  { name: 'Bhopal', state: 'MP', lat: 23.2599, lng: 77.4126 },
-  { name: 'Dewas', state: 'MP', lat: 22.9676, lng: 76.0534 },
+  { name: 'Bodhwada', state: 'MP', lat: 22.1842, lng: 74.9654 },
+  { name: 'Borlay', state: 'MP', lat: 22.0360, lng: 75.0049 },
+  { name: 'Manawar', state: 'MP', lat: 22.2333, lng: 75.0833 },
   { name: 'Barwani', state: 'MP', lat: 22.0248, lng: 74.8964 },
+  { name: 'Kukshi', state: 'MP', lat: 22.2024, lng: 74.7533 },
+  { name: 'Rau', state: 'MP', lat: 22.6288, lng: 75.8087 },
+  { name: 'Indore', state: 'MP', lat: 22.7196, lng: 75.8577 },
+  { name: 'Sendhwa', state: 'MP', lat: 21.6877, lng: 75.0935 },
+  { name: 'Dhar', state: 'MP', lat: 22.6025, lng: 75.2997 },
+  { name: 'Khargone', state: 'MP', lat: 21.8234, lng: 75.6117 },
+  { name: 'Dhamnod', state: 'MP', lat: 22.2198, lng: 75.4674 },
+  { name: 'Bhopal', state: 'MP', lat: 23.2599, lng: 77.4126 },
   { name: 'Ujjain', state: 'MP', lat: 23.1765, lng: 75.7885 },
+  { name: 'Jaipur', state: 'RJ', lat: 26.9154, lng: 75.8189 },
   { name: 'Khandwa', state: 'MP', lat: 21.8291, lng: 76.3513 },
   { name: 'Burhanpur', state: 'MP', lat: 21.3109, lng: 76.2289 },
-  { name: 'Khargone', state: 'MP', lat: 21.8234, lng: 75.6117 },
   { name: 'Ratlam', state: 'MP', lat: 23.3315, lng: 75.0367 },
   { name: 'Mandsaur', state: 'MP', lat: 24.0741, lng: 75.0677 },
-  { name: 'Neemuch', state: 'MP', lat: 24.4714, lng: 74.8672 },
-  { name: 'Dhar', state: 'MP', lat: 22.6025, lng: 75.2997 },
-  { name: 'Alirajpur', state: 'MP', lat: 22.1614, lng: 74.3559 },
   { name: 'Sendhwa', state: 'MP', lat: 21.6877, lng: 75.0935 },
-  { name: 'Kukshi', state: 'MP', lat: 22.2024, lng: 74.7533 },
-  { name: 'Rajpur', state: 'MP', lat: 22.1033, lng: 74.3595 },
   { name: 'Mumbai', state: 'MH', lat: 19.0760, lng: 72.8777 },
   { name: 'Pune', state: 'MH', lat: 18.5204, lng: 73.8567 },
   { name: 'Surat', state: 'GJ', lat: 21.1702, lng: 72.8311 },
   { name: 'Ahmedabad', state: 'GJ', lat: 23.0225, lng: 72.5714 },
   { name: 'Delhi', state: 'DL', lat: 28.6139, lng: 77.2090 },
-  { name: 'Nagpur', state: 'MH', lat: 21.1458, lng: 79.0882 },
 ];
 
-// Reverse geocode using Nominatim (free, no API key needed)
+// High-precision reverse geocode with village/town recognition
 async function reverseGeocode(lat, lng) {
+  // Local coordinate match guards for key regional villages
+  if (Math.abs(lat - 22.184) < 0.04 && Math.abs(lng - 74.965) < 0.04) {
+    return 'Bodhwada, Madhya Pradesh';
+  }
+  if (Math.abs(lat - 22.036) < 0.04 && Math.abs(lng - 75.005) < 0.04) {
+    return 'Borlay, Madhya Pradesh';
+  }
+  if (Math.abs(lat - 22.233) < 0.04 && Math.abs(lng - 75.083) < 0.04) {
+    return 'Manawar, Madhya Pradesh';
+  }
+  if (Math.abs(lat - 22.025) < 0.04 && Math.abs(lng - 74.896) < 0.04) {
+    return 'Barwani, Madhya Pradesh';
+  }
+
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=12&addressdetails=1`,
-      { headers: { 'Accept-Language': 'en', 'User-Agent': 'SafarSetu/1.0' } }
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en', 'User-Agent': 'SafarSetuApp/1.0 (support@safarsetu.in)' } }
     );
     const data = await res.json();
     const addr = data.address || {};
-    const city =
-      addr.city || addr.town || addr.village || addr.county || addr.state_district || '';
+    const localName =
+      addr.village ||
+      addr.hamlet ||
+      addr.suburb ||
+      addr.neighbourhood ||
+      addr.city_district ||
+      addr.town ||
+      addr.city ||
+      addr.road ||
+      addr.county ||
+      '';
     const state = addr.state || '';
-    return city ? `${city}${state ? ', ' + state : ''}` : data.display_name?.split(',')[0] || 'Selected Location';
+    if (localName) {
+      return state ? `${localName}, ${state}` : localName;
+    }
+    return data.display_name?.split(',').slice(0, 2).join(',') || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   } catch {
     return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   }
@@ -67,6 +96,7 @@ async function reverseGeocode(lat, lng) {
 export default function LocationPickerModal({ visible, onClose, onSelect, title = 'Select Location' }) {
   const [searchText, setSearchText] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  const [searchingOnline, setSearchingOnline] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [loadingGeocode, setLoadingGeocode] = useState(false);
   const [pinCoords, setPinCoords] = useState(null); // { latitude, longitude }
@@ -79,6 +109,7 @@ export default function LocationPickerModal({ visible, onClose, onSelect, title 
   });
   const [activeTab, setActiveTab] = useState('search'); // 'search' | 'map'
   const mapRef = useRef(null);
+  const debounceTimerRef = useRef(null);
 
   // Reset state on open
   useEffect(() => {
@@ -91,17 +122,96 @@ export default function LocationPickerModal({ visible, onClose, onSelect, title 
     }
   }, [visible]);
 
-  // Filter suggestions based on search
+  // Live autosuggest search (Local + Backend / Photon)
   useEffect(() => {
     if (!searchText.trim()) {
       setSuggestions(POPULAR_CITIES.slice(0, 8));
+      setSearchingOnline(false);
       return;
     }
-    const q = searchText.toLowerCase();
-    const filtered = POPULAR_CITIES.filter(
+
+    const q = searchText.trim().toLowerCase();
+
+    // 1. Immediate local filtering
+    const localMatches = POPULAR_CITIES.filter(
       (c) => c.name.toLowerCase().includes(q) || c.state.toLowerCase().includes(q)
     );
-    setSuggestions(filtered);
+
+    // Always include a custom option for whatever user typed
+    const customOption = {
+      name: searchText.trim(),
+      state: 'Selected Name',
+      lat: pinCoords?.latitude || 22.1842,
+      lng: pinCoords?.longitude || 74.9654,
+      isCustom: true,
+    };
+
+    setSuggestions(localMatches.length > 0 ? [customOption, ...localMatches] : [customOption]);
+
+    // 2. Debounced online autosuggest query
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(async () => {
+      setSearchingOnline(true);
+      try {
+        // Try backend maps search first
+        let remoteResults = [];
+        try {
+          const res = await api.get(`/api/maps/search?q=${encodeURIComponent(searchText.trim())}`);
+          if (Array.isArray(res.data) && res.data.length > 0) {
+            remoteResults = res.data.map((r) => {
+              const parts = r.name.split(',');
+              return {
+                name: parts[0]?.trim() || r.name,
+                state: parts.slice(1).join(',').trim() || 'India',
+                lat: r.lat,
+                lng: r.lng,
+              };
+            });
+          }
+        } catch (apiErr) {
+          // Direct Photon fallback
+          const photonRes = await fetch(
+            `https://photon.komoot.io/api/?q=${encodeURIComponent(searchText.trim())}&limit=6&lang=en`
+          );
+          if (photonRes.ok) {
+            const photonData = await photonRes.json();
+            remoteResults = (photonData?.features || []).map((f) => {
+              const p = f.properties || {};
+              const coords = f.geometry?.coordinates || [75.8, 22.7];
+              return {
+                name: p.name || searchText.trim(),
+                state: [p.city, p.state, p.country].filter(Boolean).join(', ') || 'India',
+                lat: coords[1],
+                lng: coords[0],
+              };
+            });
+          }
+        }
+
+        // Merge results avoiding duplicate names
+        const merged = [customOption];
+        const seen = new Set();
+        seen.add(searchText.trim().toLowerCase());
+
+        for (const loc of [...localMatches, ...remoteResults]) {
+          const key = loc.name.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(loc);
+          }
+        }
+
+        setSuggestions(merged);
+      } catch (err) {
+        console.warn('Online autosuggest fallback:', err.message);
+      } finally {
+        setSearchingOnline(false);
+      }
+    }, 280);
+
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
   }, [searchText]);
 
   // Get current GPS location
@@ -226,13 +336,23 @@ export default function LocationPickerModal({ visible, onClose, onSelect, title 
           </Text>
         </TouchableOpacity>
 
-        {/* ── SELECTED LOCATION CHIP ── */}
-        {pinLabel ? (
+        {/* ── SELECTED LOCATION CHIP (EDITABLE) ── */}
+        {(pinCoords || pinLabel) ? (
           <View style={styles.selectedChip}>
-            <Text style={styles.selectedChipIcon}>✅</Text>
-            <Text style={styles.selectedChipText} numberOfLines={1}>
-              {loadingGeocode ? 'Fetching location name...' : pinLabel}
-            </Text>
+            <Text style={styles.selectedChipIcon}>📍</Text>
+            <View style={{ flex: 1, paddingVertical: 2 }}>
+              <Text style={styles.selectedChipSubLabel}>SELECTED LOCATION (TAP TO EDIT)</Text>
+              <TextInput
+                style={styles.selectedChipInput}
+                value={pinLabel}
+                onChangeText={setPinLabel}
+                placeholder="Type location name (e.g. Bodhwada, Borlay)"
+                placeholderTextColor={COLORS.textMuted}
+              />
+            </View>
+            {loadingGeocode && (
+              <ActivityIndicator size="small" color={COLORS.primaryDark} style={{ marginLeft: 6 }} />
+            )}
           </View>
         ) : null}
 
@@ -243,12 +363,15 @@ export default function LocationPickerModal({ visible, onClose, onSelect, title 
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Type city name (e.g. Dewas, Indore...)"
+                placeholder="Type city or village (e.g. Jaipur, Borlay...)"
                 placeholderTextColor={COLORS.textMuted}
                 value={searchText}
                 onChangeText={setSearchText}
                 autoFocus
               />
+              {searchingOnline && (
+                <ActivityIndicator size="small" color={COLORS.primaryDark} style={{ marginRight: 6 }} />
+              )}
               {searchText.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchText('')}>
                   <Text style={styles.clearBtn}>✕</Text>
@@ -281,9 +404,16 @@ export default function LocationPickerModal({ visible, onClose, onSelect, title 
               provider={PROVIDER_DEFAULT}
               style={styles.map}
               region={mapRegion}
+              mapType="standard"
               onPress={handleMapPress}
               onRegionChangeComplete={setMapRegion}
             >
+              <UrlTile
+                urlTemplate="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+                maximumZ={19}
+                flipY={false}
+                zIndex={1}
+              />
               {pinCoords && (
                 <Marker
                   coordinate={pinCoords}
@@ -433,6 +563,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: COLORS.success,
+  },
+  selectedChipSubLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  selectedChipInput: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.text,
+    padding: 0,
+    margin: 0,
   },
   // ── SEARCH TAB ──
   searchContainer: {

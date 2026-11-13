@@ -40,10 +40,13 @@ model User {
   name         String
   role         Role
   location     String?
-  whatsapp     String?
-  deleted      Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  whatsapp      String?
+  plainPassword String?
+  expoPushToken String?  @db.VarChar(255)
+  isFirstLogin  Boolean  @default(true)
+  deleted       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   driverProfile      DriverProfile?
   bookingsAsCustomer Booking[] @relation("CustomerBooking")
@@ -67,14 +70,15 @@ model DriverProfile {
 }
 
 model CarCategory {
-  id         Int    @id @default(autoincrement())
-  name       String
-  type       String
-  pricePerKm Float
-  seats      Int
-  image      String @db.LongText
-  eta        String @default("5 mins")
-  sortOrder  Int    @default(0)
+  id                Int    @id @default(autoincrement())
+  name              String
+  type              String
+  pricePerKm        Float
+  seats             Int
+  image             String @db.LongText
+  eta               String @default("5 mins")
+  sortOrder         Int    @default(0)
+  commissionPercent Float  @default(12.0)
 
   @@map("carcategory")
 }
@@ -98,6 +102,9 @@ model Booking {
   status       BookingStatus @default(PENDING)
   bookingDate  String
   bookingTime  String
+  advancePaid   Float         @default(0)
+  advanceStatus String        @default("PENDING")
+  advanceUtr    String?
   createdAt    DateTime      @default(now())
 
   payments Payment[]
@@ -116,4 +123,16 @@ model Payment {
   date         String
 
   @@map("payment")
+}
+
+model AppSettings {
+  id            Int      @id @default(1)
+  qrCodeUrl     String?  @db.LongText
+  upiId         String?  @default("9755339783@upi")
+  advanceAmount Float    @default(200)
+  helpline1     String   @default("6261828036")
+  helpline2     String   @default("9755339783")
+  updatedAt     DateTime @updatedAt
+
+  @@map("appsettings")
 }

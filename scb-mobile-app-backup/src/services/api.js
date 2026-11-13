@@ -1,14 +1,16 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 💡 EMULATOR NOTE:
-// iOS emulator uses '127.0.0.1:4000' or 'localhost:4000' for local testing.
-// Android emulator uses '10.0.2.2:4000' to reach the local backend machine.
-// Live Production URL: 'https://safarsetu-backend-production-cd62.up.railway.app'
+// 💡 CONNECTION OPTIONS:
+// Live Production Backend (Render) - Works on ANY Wi-Fi or Mobile Data (Jio/Airtel):
+const BASE_URL = 'https://safarsetubackend-18-10-26.onrender.com';
 
-const BASE_URL = 'https://car-booking-barwani-23-8-26-production.up.railway.app';
-// const BASE_URL = 'http://10.0.2.2:4000'; // Uncomment for Android Emulator local testing
-// const BASE_URL = 'http://localhost:4000';  // Uncomment for iOS Emulator local testing
+// Option 1: Physical Phone on same Wi-Fi (Use PC IP):
+// const BASE_URL = 'http://192.168.1.23:4000';
+
+// Option 2: Local Emulators
+// const BASE_URL = 'http://10.0.2.2:4000';     // Android Emulator
+// const BASE_URL = 'http://localhost:4000';    // iOS Simulator
 
 const api = axios.create({
   baseURL: BASE_URL,

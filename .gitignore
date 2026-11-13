@@ -8,5 +8,6 @@ build/
 .expo/
 *.log
 *.zip
+*.apk
 .DS_Store
 Thumbs.db

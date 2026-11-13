@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>सफरसेतु — मंदिर दर्शन एवं पिकनिक टूर (60-Sec Official Video)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800;900&family=Noto+Sans+Devanagari:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body {
+      font-family: 'Noto Sans Devanagari', 'Outfit', sans-serif;
+      background: radial-gradient(circle at 50% 15%, #1e1b4b 0%, #09090b 100%);
+      color: #f4f4f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 10px;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+      max-width: 900px;
+      width: 100%;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #ffffff 0%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #a1a1aa;
+      margin-top: 4px;
+    }
+
+    /* Video Player Frame */
+    .player-wrapper {
+      position: relative;
+      background: #000;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9), 0 0 45px rgba(245, 158, 11, 0.2);
+      border: 2px solid rgba(245, 158, 11, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: width 0.3s ease, height 0.3s ease;
+    }
+    .player-wrapper.landscape {
+      width: 854px;
+      height: 480px;
+      max-width: 95vw;
+      max-height: 56vw;
+    }
+    .player-wrapper.portrait {
+      width: 360px;
+      height: 640px;
+      max-height: 85vh;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* Controls Overlay */
+    .overlay-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 60%, transparent 100%);
+      padding: 16px 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .progress-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 999px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .left-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ctrl-btn {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .ctrl-btn:hover {
+      background: rgba(245, 158, 11, 0.3);
+      border-color: #f59e0b;
+      transform: translateY(-1px);
+    }
+    .ctrl-btn.active {
+      background: #f59e0b;
+      color: #000;
+      border-color: #f59e0b;
+    }
+    .time-display {
+      font-size: 13px;
+      font-weight: 800;
+      color: #fbbf24;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Actions Bar */
+    .studio-bar {
+      margin-top: 18px;
+      width: 100%;
+      max-width: 854px;
+      background: rgba(24, 24, 27, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(12px);
+      padding: 14px 20px;
+      border-radius: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .bar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bar-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: #a1a1aa;
+    }
+
+    /* Download Button */
+    .record-btn {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      border: none;
+      padding: 11px 22px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+      transition: all 0.2s;
+    }
+    .record-btn:hover {
+      transform: scale(1.03);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+    }
+    .record-btn.recording {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Scene Pills */
+    .scene-pills {
+      margin-top: 14px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 854px;
+    }
+    .scene-pill {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #a1a1aa;
+      transition: all 0.15s;
+    }
+    .scene-pill:hover, .scene-pill.active {
+      background: rgba(245, 158, 11, 0.25);
+      border-color: #f59e0b;
+      color: #fbbf24;
+    }
+
+    /* Subtitles Box */
+    .subtitles-card {
+      margin-top: 14px;
+      width: 100%;
+      max-width: 854px;
+      background: rgba(24, 24, 27, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 14px 20px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #f4f4f5;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .subtitles-card strong {
+      color: #f59e0b;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="badge">🛕 स्पेशल टूरिज्म एवं आउटस्टेशन कार रेंटल वीडियो (60 Sec)</div>
+    <h1 class="title">सफरसेतु — मंदिर दर्शन, पिकनिक एवं 100-500 KM टूर</h1>
+    <p class="subtitle">शुद्ध हिन्दी वॉयसओवर • ओरिजिनल सॉफ्टवेयर लैंडिंग पेज • 1-क्लिक वीडियो रिकॉर्डर</p>
+  </header>
+
+  <!-- Player Wrapper -->
+  <div class="player-wrapper landscape" id="playerWrapper">
+    <canvas id="videoCanvas" width="1280" height="720"></canvas>
+    
+    <div class="overlay-controls">
+      <div class="progress-container" id="progressBarContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="controls-row">
+        <div class="left-controls">
+          <button class="ctrl-btn" id="playBtn">▶ Play</button>
+          <button class="ctrl-btn" id="restartBtn">🔄 Replay</button>
+          <button class="ctrl-btn" id="voiceToggleBtn">🔊 वॉयस: चालू</button>
+          <span class="time-display" id="timeDisplay">00:00 / 01:00</span>
+        </div>
+        <div>
+          <button class="ctrl-btn" id="fullscreenBtn">⛶ Fullscreen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Studio Settings Bar -->
+  <div class="studio-bar">
+    <div class="bar-group">
+      <span class="bar-label">भाषा:</span>
+      <button class="ctrl-btn active" id="langBtn">🇮🇳 शुद्ध हिन्दी (100% Hindi Voice)</button>
+    </div>
+
+    <div class="bar-group">
+      <span class="bar-label">फॉर्मेट:</span>
+      <button class="ctrl-btn active" id="ratioLandscape">📺 16:9 (Landscape / YouTube)</button>
+      <button class="ctrl-btn" id="ratioPortrait">📱 9:16 (Instagram Reel / Status)</button>
+    </div>
+
+    <button class="record-btn" id="recordBtn">
+      <span>🔴</span>
+      <span id="recordBtnText">Record & Download Video (.webm)</span>
+    </button>
+  </div>
+
+  <!-- Scene Navigation Pills -->
+  <div class="scene-pills" id="scenePills">
+    <button class="scene-pill active" data-scene="0">1. मंदिर दर्शन यात्रा</button>
+    <button class="scene-pill" data-scene="1">2. पिकनिक व 100-500 KM टूर</button>
+    <button class="scene-pill" data-scene="2">3. सफरसेतु पोर्टल व बुकिंग</button>
+    <button class="scene-pill" data-scene="3">4. सेडान व 7-सीटर अर्टिगा फ्लीट</button>
+    <button class="scene-pill" data-scene="4">5. वेरिफाइड ड्राइवर्स व एसी</button>
+    <button class="scene-pill" data-scene="5">6. आज ही टूर बुक करें</button>
+  </div>
+
+  <!-- Subtitle display -->
+  <div class="subtitles-card">
+    <strong>🎙️ लाइव वॉयसओवर:</strong>
+    <span id="subtitleText">"क्या आप परिवार के साथ उज्जैन महाकाल, ओंकारेश्वर या किसी भी तीर्थ यात्रा पर जाने की सोच रहे हैं?..."</span>
+  </div>
+
+  <script>
+    // ── 60-SECOND SCENE DEFINITION (TOURISM SPECIAL - 100% HINDI) ──
+    const SCENES = [
+      {
+        id: 0,
+        title: "🛕 मंदिर दर्शन व तीर्थ यात्राएं",
+        duration: 10, // 0 to 10s
+        imageKey: 'mandir',
+        headline: "महाकाल, ओंकारेश्वर एवं तीर्थ यात्राएं",
+        subtitle: "क्या आप परिवार के साथ उज्जैन महाकाल, ओंकारेश्वर या किसी भी तीर्थ यात्रा पर जाने की सोच रहे हैं? अब मंदिर दर्शन हो या तीर्थ यात्रा, सफरसेतु के साथ आपका सफर होगा सुखद और मंगलमय!"
+      },
+      {
+        id: 1,
+        title: "🏞️ पिकनिक, आउटिंग एवं 100-500 KM टूर",
+        duration: 10, // 10 to 20s
+        imageKey: 'picnic',
+        headline: "पिकनिक एवं 100, 200, 500 KM टूर",
+        subtitle: "दोस्तों के साथ पिकनिक हो या 100, 200 या 500 किलोमीटर का लम्बा आउटस्टेशन सफर! भाड़े पर गाड़ी ढूंढने का झंझट छोड़िए, सफरसेतु लाया है सबसे किफायती और आरामदायक गाड़ियां!"
+      },
+      {
+        id: 2,
+        title: "💻 सफरसेतु पोर्टल — आसान बुकिंग",
+        duration: 12, // 20 to 32s
+        imageKey: 'software',
+        headline: "सफरसेतु वेबसाइट — घर बैठे मिनटों में बुकिंग",
+        subtitle: "बस सफरसेतु वेबसाइट या ऐप पर आइए, अपने गांव या शहर से पिकअप और ड्रॉप चुनिए, लाइव किराया देखिए और तुरंत अपनी कार बुक कीजिए — बिना किसी छुपे हुए चार्ज के!"
+      },
+      {
+        id: 3,
+        title: "🚗 सेडान व 7-सीटर अर्टिगा फ्लीट",
+        duration: 12, // 32 to 44s
+        imageKey: 'cabs',
+        headline: "4 सीटर से 7 सीटर तक — मात्र ₹10 से ₹14/KM",
+        subtitle: "हमारी फ्लीट में शामिल हैं हर ज़रूरत के लिए गाड़ियां — छोटी फैमिली के लिए कंफर्टेबल सेडान और बड़े परिवार के लिए 7-सीटर अर्टिगा! रेट मात्र 10 से 14 रुपये प्रति किलोमीटर से शुरू!"
+      },
+      {
+        id: 4,
+        title: "🛡️ वेरिफाइड ड्राइवर्स व फुल एसी आराम",
+        duration: 8, // 44 to 52s
+        imageKey: 'mandir',
+        overlayType: 'features',
+        headline: "वेरिफाइड ड्राइवर्स • 100% ऑन-टाइम पिकअप",
+        subtitle: "अनुभवी और संस्कारी ड्राइवर्स, चिल्ड एसी गाड़ियां, डोरस्टेप पिकअप और 24 घंटे कस्टमर सपोर्ट — ताकि आपकी पूरी फैमिली रहे हमेशा सुरक्षित!"
+      },
+      {
+        id: 5,
+        title: "🚖 आज ही टूर बुक करें",
+        duration: 8, // 52 to 60s
+        imageKey: 'poster',
+        overlayType: 'cta',
+        headline: "सफरसेतु — आपका विश्वास, हमारा संकल्प",
+        subtitle: "तो देर किस बात की? आज ही अपने मंदिर दर्शन और पिकनिक टूर के लिए कार बुक करें सफरसेतु से! सफरसेतु — सुखद और सुरक्षित यात्रा!"
+      }
+    ];
+
+    const TOTAL_DURATION = 60; // Exact 1 Minute
+
+    // Asset loader
+    const images = {};
+    const assetSources = {
+      mandir: '/video-assets/mandir-tour.jpg',
+      picnic: '/video-assets/picnic-tour.jpg',
+      software: '/video-assets/landing-software.jpg',
+      cabs: '/video-assets/scene2.jpg',
+      poster: '/video-assets/poster.jpg'
+    };
+
+    let assetsLoaded = 0;
+    for (const [key, src] of Object.entries(assetSources)) {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        images[key] = img;
+        assetsLoaded++;
+      };
+    }
+
+    // State
+    let isPlaying = false;
+    let currentTime = 0;
+    let isVoiceEnabled = true;
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let animationFrameId = null;
+    let lastTimestamp = 0;
+    let currentSpeechScene = -1;
+
+    // Elements
+    const canvas = document.getElementById('videoCanvas');
+    const ctx = canvas.getContext('2d');
+    const playBtn = document.getElementById('playBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const voiceToggleBtn = document.getElementById('voiceToggleBtn');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const progressBar = document.getElementById('progressBar');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const recordBtn = document.getElementById('recordBtn');
+    const recordBtnText = document.getElementById('recordBtnText');
+    const subtitleText = document.getElementById('subtitleText');
+    const playerWrapper = document.getElementById('playerWrapper');
+
+    // Speech synthesis
+    const synth = window.speechSynthesis;
+
+    function speakCurrentScene(sceneIndex) {
+      if (!isVoiceEnabled || !synth) return;
+      if (currentSpeechScene === sceneIndex) return;
+      currentSpeechScene = sceneIndex;
+
+      synth.cancel();
+      const text = SCENES[sceneIndex].subtitle;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 0.94;
+      utter.pitch = 1.02;
+
+      const voices = synth.getVoices();
+      const hiVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('hi-IN'));
+      if (hiVoice) utter.voice = hiVoice;
+
+      synth.speak(utter);
+    }
+
+    function fmtTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    function getSceneAtTime(t) {
+      let accumulated = 0;
+      for (let i = 0; i < SCENES.length; i++) {
+        if (t >= accumulated && t < accumulated + SCENES[i].duration) {
+          return { scene: SCENES[i], index: i, sceneProgress: (t - accumulated) / SCENES[i].duration };
+        }
+        accumulated += SCENES[i].duration;
+      }
+      return { scene: SCENES[SCENES.length - 1], index: SCENES.length - 1, sceneProgress: 1 };
+    }
+
+    // ── RENDER LOOP ──
+    function render(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      if (isPlaying) {
+        currentTime += delta;
+        if (currentTime >= TOTAL_DURATION) {
+          currentTime = TOTAL_DURATION;
+          isPlaying = false;
+          playBtn.textContent = '▶ Play';
+          if (isRecording) stopRecording();
+        }
+      }
+
+      const progressPercent = (currentTime / TOTAL_DURATION) * 100;
+      progressBar.style.width = `${progressPercent}%`;
+      timeDisplay.textContent = `${fmtTime(currentTime)} / 01:00`;
+
+      const { scene, index, sceneProgress } = getSceneAtTime(currentTime);
+
+      if (isPlaying) {
+        speakCurrentScene(index);
+      }
+
+      subtitleText.textContent = `"${scene.subtitle}"`;
+
+      document.querySelectorAll('.scene-pill').forEach((pill, pIdx) => {
+        pill.classList.toggle('active', pIdx === index);
+      });
+
+      // Clear Canvas
+      ctx.fillStyle = '#050505';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Background with Ken-Burns pan & zoom
+      const img = images[scene.imageKey];
+      if (img && img.complete) {
+        ctx.save();
+        const scale = 1.0 + (sceneProgress * 0.07);
+        const panX = Math.sin(sceneProgress * Math.PI) * 15;
+
+        ctx.translate(canvas.width / 2 + panX, canvas.height / 2);
+        ctx.scale(scale, scale);
+
+        const imgRatio = img.width / img.height;
+        const canvasRatio = canvas.width / canvas.height;
+        let dw, dh;
+        if (imgRatio > canvasRatio) {
+          dh = canvas.height;
+          dw = dh * imgRatio;
+        } else {
+          dw = canvas.width;
+          dh = dw / imgRatio;
+        }
+        ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
+
+        // Cinematic Vignette Overlays
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, 'rgba(0,0,0,0.65)');
+        grad.addColorStop(0.3, 'rgba(0,0,0,0.15)');
+        grad.addColorStop(0.7, 'rgba(0,0,0,0.4)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.94)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // Brand Top Bar
+      ctx.save();
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '900 24px Outfit, sans-serif';
+      ctx.fillText('🚖 SAFARSETU', 40, 50);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 15px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('टूरिज्म एवं आउटस्टेशन स्पेशल (100 - 500 KM)', 210, 48);
+      ctx.restore();
+
+      // Scene Badge & Headline
+      ctx.save();
+      ctx.fillStyle = '#f59e0b';
+      ctx.roundRect(40, 75, 290, 32, 8);
+      ctx.fill();
+
+      ctx.fillStyle = '#000000';
+      ctx.font = '900 14px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(scene.title, 50, 97);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 36px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText(scene.headline, 40, 145);
+      ctx.restore();
+
+      // Feature Overlays
+      if (scene.id === 2) {
+        // Landing Page Software Highlight
+        ctx.save();
+        ctx.fillStyle = 'rgba(11, 30, 63, 0.9)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.roundRect(canvas.width - 440, 80, 400, 220, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = '900 16px "Noto Sans Devanagari", sans-serif';
+        ctx.fillText('💻 ऑनलाइन बुकिंग पोर्टल', canvas.width - 415, 115);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 15px "Noto Sans Devanagari", sans-serif';
+        ctx.fillText('• 100, 200, 500 KM आउटस्टेशन टूर', canvas.width - 415, 150);
+        ctx.fillText('• लाइव रूट व तुरंत फिक्स किराया', canvas.width - 415, 180);
+        ctx.fillText('• 12-Hour टाइम पिकर (AM / PM)', canvas.width - 415, 210);
+
+        ctx.fillStyle = '#10b981';
+        ctx.font = '900 15px "Noto Sans Devanagari", sans-serif';
+        ctx.fillText('✓ घर बैठे 3 आसान स्टेप्स में बुक करें!', canvas.width - 415, 250);
+        ctx.restore();
+      } else if (scene.id === 3) {
+        // Fleet Pricing Cards
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.roundRect(canvas.width - 440, 80, 400, 220, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = '900 16px "Noto Sans Devanagari", sans-serif';
+        ctx.fillText('🚗 सभी प्रकार की गाड़ियां उपलब्ध', canvas.width - 415, 115);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 15px "Noto Sans Devanagari", sans-serif';
+        ctx.fillText('• Maruti Swift / Sedan: ₹12 - ₹14/km', canvas.width - 415, 150);
+        ctx.fillText('• 7-Seater Ertiga SUV: ₹14/km (Big Family)', canvas.width - 415, 180);
+        ctx.fillText('• Maruti Omni / Van: ₹10/km', canvas.width - 415, 210);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '900 15px "Noto Sans Devanagari", sans-serif';
+        ctx.fillText('⚡ सबसे कम भाड़ा • कोई हिडन चार्ज नहीं!', canvas.width - 415, 250);
+        ctx.restore();
+      }
+
+      // Bottom Subtitles Box
+      ctx.save();
+      const subBoxH = 115;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+      ctx.fillRect(0, canvas.height - subBoxH, canvas.width, subBoxH);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(0, canvas.height - subBoxH, canvas.width, 3);
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '900 14px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('🎙️ हिन्दी वॉयसओवर:', 40, canvas.height - 78);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 20px "Noto Sans Devanagari", sans-serif';
+      const sub = scene.subtitle;
+      const words = sub.split(' ');
+      let line1 = '';
+      let line2 = '';
+      for (const w of words) {
+        if ((line1 + w).length < 65) {
+          line1 += w + ' ';
+        } else {
+          line2 += w + ' ';
+        }
+      }
+      ctx.fillText(line1, 40, canvas.height - 48);
+      if (line2) {
+        ctx.fillText(line2, 40, canvas.height - 20);
+      }
+      ctx.restore();
+
+      animationFrameId = requestAnimationFrame(render);
+    }
+
+    animationFrameId = requestAnimationFrame(render);
+
+    // Event handlers
+    playBtn.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      playBtn.textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+      if (!isPlaying && synth) synth.cancel();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      currentTime = 0;
+      currentSpeechScene = -1;
+      if (synth) synth.cancel();
+      isPlaying = true;
+      playBtn.textContent = '⏸ Pause';
+    });
+
+    voiceToggleBtn.addEventListener('click', () => {
+      isVoiceEnabled = !isVoiceEnabled;
+      voiceToggleBtn.textContent = isVoiceEnabled ? '🔊 वॉयस: चालू' : '🔇 वॉयस: बंद';
+      if (!isVoiceEnabled && synth) synth.cancel();
+      else if (isVoiceEnabled && isPlaying) {
+        currentSpeechScene = -1;
+      }
+    });
+
+    // Ratio Switchers
+    document.getElementById('ratioLandscape').addEventListener('click', () => {
+      playerWrapper.className = 'player-wrapper landscape';
+      canvas.width = 1280;
+      canvas.height = 720;
+      document.getElementById('ratioLandscape').classList.add('active');
+      document.getElementById('ratioPortrait').classList.remove('active');
+    });
+
+    document.getElementById('ratioPortrait').addEventListener('click', () => {
+      playerWrapper.className = 'player-wrapper portrait';
+      canvas.width = 720;
+      canvas.height = 1280;
+      document.getElementById('ratioPortrait').classList.add('active');
+      document.getElementById('ratioLandscape').classList.remove('active');
+    });
+
+    // Progress bar click
+    progressBarContainer.addEventListener('click', (e) => {
+      const rect = progressBarContainer.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      currentTime = ratio * TOTAL_DURATION;
+      currentSpeechScene = -1;
+    });
+
+    // Scene pill click
+    document.querySelectorAll('.scene-pill').forEach((pill, pIdx) => {
+      pill.addEventListener('click', () => {
+        let t = 0;
+        for (let i = 0; i < pIdx; i++) t += SCENES[i].duration;
+        currentTime = t + 0.1;
+        currentSpeechScene = -1;
+      });
+    });
+
+    // Fullscreen
+    document.getElementById('fullscreenBtn').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        playerWrapper.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    // Record & Download 60-Sec Video
+    recordBtn.addEventListener('click', () => {
+      if (!isRecording) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    });
+
+    function startRecording() {
+      try {
+        const stream = canvas.captureStream(30);
+        let options = { mimeType: 'video/webm;codecs=vp9' };
+        try {
+          mediaRecorder = new MediaRecorder(stream, options);
+        } catch {
+          mediaRecorder = new MediaRecorder(stream);
+        }
+
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `safarsetu-mandir-picnic-tour-hindi.webm`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          }, 100);
+          recordBtn.classList.remove('recording');
+          recordBtnText.textContent = 'Record & Download Video (.webm)';
+          alert('🎉 60-सेकंड टूरिज्म वीडियो डाउनलोड हो गया है!');
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.classList.add('recording');
+        recordBtnText.textContent = 'रिकॉर्डिंग चालू है... (रोकने के लिए दबाएं)';
+
+        currentTime = 0;
+        currentSpeechScene = -1;
+        isPlaying = true;
+        playBtn.textContent = '⏸ Pause';
+      } catch (err) {
+        alert('स्क्रीन रिकॉर्डर चालू नहीं हो सका: ' + err.message);
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -6,12 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true
     },
@@ -20,15 +14,29 @@
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.mukul_ydv09.mobileapp"
+      "package": "com.mukul_ydv09.mobileapp",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCguobt0m_moeLGOTM3YUVDc05ONGg30aI"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/logo.png"
     },
+    "plugins": [
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo.png",
+          "color": "#1F3A60"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
-        "projectId": "a0bd1092-370f-4424-a2cd-daf47507fe00"
+        "projectId": "e74f7d4d-031a-443a-9eaa-b048b24929f1"
       }
     }
   }

@@ -8,6 +8,7 @@ import adminRoutes from './routes/admin.routes.js';
 import superadminRoutes from './routes/superadmin.routes.js';
 import mapsRoutes from './routes/maps.routes.js';
 import catalogRoutes from './routes/catalog.routes.js';
+import { initWhatsApp } from './services/whatsapp.service.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -19,6 +20,7 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   'http://localhost:5173',
   'https://cab-book-barwani.netlify.app',
+  'https://carbookingbarwani.netlify.app',
   process.env.CORS_ORIGIN
 ].filter(Boolean);
 
@@ -27,7 +29,11 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      if (
+        allowedOrigins.indexOf(origin) !== -1 ||
+        allowedOrigins.includes('*') ||
+        origin.endsWith('.netlify.app')
+      ) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -37,7 +43,8 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Health Check & Root Routes for Railway
 app.get('/', (_req, res) => {
@@ -93,5 +100,12 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log('✅ Database connected successfully');
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
+  }
+
+  // Initialize SafarSetu WhatsApp OTP Engine
+  try {
+    initWhatsApp();
+  } catch (err) {
+    console.warn('⚠️ WhatsApp initialization notice:', err.message);
   }
 });

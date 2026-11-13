@@ -12,8 +12,11 @@ import {
   Dimensions,
   Image,
   ScrollView,
+  Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import LeafletMapView from '../../components/LeafletMapView';
 import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
 
@@ -50,6 +53,8 @@ export default function DriverJobsScreen() {
   const [activeView, setActiveView] = useState('list'); // 'list', 'navigation'
   const [activeRide, setActiveRide] = useState(null);
   const [navState, setNavState] = useState('accepted'); // 'accepted', 'arrived', 'started'
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [enteredOtp, setEnteredOtp] = useState('');
   
   const mapRef = useRef(null);
 
@@ -129,16 +134,37 @@ export default function DriverJobsScreen() {
     }
   };
 
-  const handleCompleteTrip = async () => {
+  const handleOpenOtpModal = () => {
+    setEnteredOtp('');
+    setOtpModalVisible(true);
+  };
+
+  const handleVerifyOtpAndComplete = async () => {
+    if (!enteredOtp || enteredOtp.trim().length !== 4) {
+      Alert.alert('Incomplete OTP', 'Please enter the 4-digit ride OTP given by the customer.');
+      return;
+    }
+
+    if (activeRide.otp && enteredOtp.trim() !== String(activeRide.otp).trim()) {
+      Alert.alert('Invalid OTP ❌', 'Entered OTP does not match the customer ride PIN. Please check customer screen and retry.');
+      return;
+    }
+
     try {
       setLoading(true);
-      await api.patch(`/api/bookings/${activeRide.id}`, { status: 'Completed' });
+      await api.patch(`/api/bookings/${activeRide.id}`, { 
+        action: 'complete',
+        otp: enteredOtp.trim(),
+        status: 'Completed'
+      });
+      setOtpModalVisible(false);
+      setEnteredOtp('');
       Alert.alert('Trip Completed! 🏁', `Good job! Earnings of ₹${activeRide.fare} logged.`);
       setActiveView('list');
       setActiveRide(null);
       fetchJobs();
     } catch (e) {
-      Alert.alert('Error', 'Unable to log trip completion.');
+      Alert.alert('Error', e.response?.data?.message || 'Unable to log trip completion.');
     } finally {
       setLoading(false);
     }
@@ -208,31 +234,73 @@ export default function DriverJobsScreen() {
     </View>
   );
 
+  const renderOtpModal = () => (
+    <Modal visible={otpModalVisible} transparent animationType="slide" onRequestClose={() => setOtpModalVisible(false)}>
+      <View style={styles.otpModalOverlay}>
+        <View style={styles.otpModalCard}>
+          <View style={styles.otpModalHeader}>
+            <View style={styles.otpIconCircle}>
+              <Text style={{ fontSize: 28 }}>🔑</Text>
+            </View>
+            <Text style={styles.otpModalTitle}>ENTER CUSTOMER RIDE OTP</Text>
+            <Text style={styles.otpModalSub}>
+              Ask the customer for the 4-digit Ride PIN displayed on their SafarSetu screen to verify drop and confirm ride completion.
+            </Text>
+          </View>
+
+          <View style={styles.otpInputBox}>
+            <TextInput
+              style={styles.otpNumberInput}
+              placeholder="••••"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="numeric"
+              maxLength={4}
+              value={enteredOtp}
+              onChangeText={setEnteredOtp}
+              autoFocus
+            />
+          </View>
+
+          <TouchableOpacity 
+            style={styles.verifyConfirmBtn}
+            onPress={handleVerifyOtpAndComplete}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            {loading ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.verifyConfirmBtnText}>VERIFY & COMPLETE TRIP 🏁</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.otpCancelBtn}
+            onPress={() => setOtpModalVisible(false)}
+          >
+            <Text style={styles.otpCancelBtnText}>CANCEL</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   if (activeView === 'navigation' && activeRide) {
     return (
       <View style={styles.navContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#000000" />
         
         {/* Full-screen navigation map */}
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_DEFAULT}
+        <LeafletMapView
+          pickupCoords={activeRide.pickupCoords}
+          dropCoords={activeRide.dropCoords}
+          pickupLabel={activeRide.pickup || 'Pickup'}
+          dropLabel={activeRide.drop || 'Drop'}
+          routeCoords={activeRide.coordinates || []}
+          distanceKm={activeRide.distance}
+          durationMin={activeRide.duration}
           style={styles.navMap}
-          initialRegion={{
-            latitude: activeRide.pickupCoords.latitude,
-            longitude: activeRide.pickupCoords.longitude,
-            latitudeDelta: 0.1,
-            longitudeDelta: 0.1,
-          }}
-        >
-          <Polyline
-            coordinates={activeRide.coordinates}
-            strokeColor={COLORS.primaryDark}
-            strokeWidth={5}
-          />
-          <Marker coordinate={activeRide.pickupCoords} title="Pickup Point" pinColor="#22C55E" />
-          <Marker coordinate={activeRide.dropCoords} title="Drop Point" pinColor="#EF4444" />
-        </MapView>
+        />
 
         {/* TOP HUD NAV BAR */}
         <View style={styles.hudOverlay}>
@@ -286,8 +354,8 @@ export default function DriverJobsScreen() {
             )}
 
             {navState === 'started' && (
-              <TouchableOpacity style={styles.completeTripBtn} onPress={handleCompleteTrip}>
-                <Text style={styles.completeTripBtnText}>COMPLETE TRIP 🏁</Text>
+              <TouchableOpacity style={styles.completeTripBtn} onPress={handleOpenOtpModal}>
+                <Text style={styles.completeTripBtnText}>ENTER OTP & COMPLETE TRIP 🔑</Text>
               </TouchableOpacity>
             )}
 
@@ -296,6 +364,7 @@ export default function DriverJobsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        {renderOtpModal()}
       </View>
     );
   }
@@ -334,6 +403,7 @@ export default function DriverJobsScreen() {
           pendingJobs.map(item => renderJobCard(item, true))
         )}
       </View>
+      {renderOtpModal()}
     </ScrollView>
   );
 }
@@ -641,5 +711,103 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontWeight: '900',
     fontSize: 12,
+  },
+
+  // ── OTP VERIFICATION MODAL STYLES ──
+  otpModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  otpModalCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  otpModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  otpIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  otpModalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  otpModalSub: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: '600',
+    paddingHorizontal: 8,
+  },
+  otpInputBox: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: COLORS.primaryDark,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  otpNumberInput: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: 14,
+    textAlign: 'center',
+    width: '100%',
+  },
+  verifyConfirmBtn: {
+    width: '100%',
+    backgroundColor: COLORS.success,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginBottom: 10,
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  verifyConfirmBtnText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '950',
+    letterSpacing: 0.5,
+  },
+  otpCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  otpCancelBtnText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

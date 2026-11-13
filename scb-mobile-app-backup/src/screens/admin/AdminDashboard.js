@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import {
   View,
   Text,
@@ -19,12 +19,13 @@ import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
+import * as ImagePicker from 'expo-image-picker';
 import { LanguageContext } from '../../context/LanguageContext';
 import { AuthContext } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
-const TABS = ['Dashboard', 'Bookings', 'Customers', 'Drivers', 'Cars', 'Payments', 'Reports'];
+const TABS = ['Dashboard', 'Bookings', 'Customers', 'Drivers', 'Cars', 'Payments', 'Reports', 'Settings'];
 
 export default function AdminDashboard({ navigation }) {
   const { t, locale, changeLanguage } = useContext(LanguageContext);
@@ -39,6 +40,14 @@ export default function AdminDashboard({ navigation }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // App Settings (QR Code, UPI, Helpline)
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [upiId, setUpiId] = useState('9755339783@upi');
+  const [advanceAmount, setAdvanceAmount] = useState('200');
+  const [helpline1, setHelpline1] = useState('6261828036');
+  const [helpline2, setHelpline2] = useState('9755339783');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [assignModalVisible, setAssignModalVisible] = useState(false);
@@ -65,13 +74,16 @@ export default function AdminDashboard({ navigation }) {
   const [drvVehicleNumber, setDrvVehicleNumber] = useState('');
   const [drvPassword, setDrvPassword] = useState('');
 
-  // Car modal
+  // Car modal & commissions
   const [carModalVisible, setCarModalVisible] = useState(false);
   const [editingCar, setEditingCar] = useState(null);
   const [carNameVal, setCarNameVal] = useState('');
   const [carTypeVal, setCarTypeVal] = useState('');
   const [carPriceVal, setCarPriceVal] = useState('');
   const [carSeatsVal, setCarSeatsVal] = useState('');
+  const [carCommissionVal, setCarCommissionVal] = useState('12');
+  const [bulkCommissions, setBulkCommissions] = useState({});
+  const [isSavingBulkComm, setIsSavingBulkComm] = useState(false);
 
   // View-only detail modals
   const [customerViewModalVisible, setCustomerViewModalVisible] = useState(false);
@@ -99,6 +111,155 @@ export default function AdminDashboard({ navigation }) {
     setSearchQuery('');
   }, [activeTab]);
 
+  // Payment Date Filter state
+  const [selectedPaymentDate, setSelectedPaymentDate] = useState('ALL');
+
+  // Helper to normalize any date into "15 Oct 2026"
+  const normalizeDateStr = useCallback((dateVal) => {
+    if (!dateVal) return '';
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+      return d.toLocaleDateString('en-GB', opts);
+    }
+    return String(dateVal).trim();
+  }, []);
+
+  const todayStr = useMemo(() => {
+    return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }, []);
+
+  const yesterdayStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }, []);
+
+  // Distinct available payment dates (sorted newest first)
+  const availablePaymentDates = useMemo(() => {
+    const datesMap = new Map();
+    payments.forEach(p => {
+      const dStr = normalizeDateStr(p.date || p.rawDate);
+      if (dStr) {
+        const timeVal = p.rawDate ? new Date(p.rawDate).getTime() : (new Date(p.date).getTime() || 0);
+        if (!datesMap.has(dStr) || datesMap.get(dStr) < timeVal) {
+          datesMap.set(dStr, timeVal);
+        }
+      }
+    });
+    return Array.from(datesMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(entry => entry[0]);
+  }, [payments, normalizeDateStr]);
+
+  // Filtered Payments based on selected date & search query
+  const filteredPayments = useMemo(() => {
+    return payments.filter(p => {
+      const pDate = normalizeDateStr(p.date || p.rawDate);
+      if (selectedPaymentDate === 'TODAY') {
+        if (pDate !== todayStr) return false;
+      } else if (selectedPaymentDate === 'YESTERDAY') {
+        if (pDate !== yesterdayStr) return false;
+      } else if (selectedPaymentDate !== 'ALL') {
+        if (pDate !== selectedPaymentDate) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const match = (p.customer || '').toLowerCase().includes(q) ||
+          (p.method || '').toLowerCase().includes(q) ||
+          (p.driverName || '').toLowerCase().includes(q) ||
+          (p.carName || '').toLowerCase().includes(q) ||
+          (String(p.bookingId || '')).toLowerCase().includes(q) ||
+          pDate.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [payments, selectedPaymentDate, searchQuery, todayStr, yesterdayStr, normalizeDateStr]);
+
+  // Live Revenue Summary for the selected date filter
+  const paymentDateSummary = useMemo(() => {
+    let totalCustomer = 0;
+    let totalAdmin = 0;
+    let totalDriver = 0;
+    let count = 0;
+
+    filteredPayments.forEach(p => {
+      const amt = Number(p.amount || 0);
+      const commRate = p.commissionPercent !== undefined ? Number(p.commissionPercent) : 12;
+      const comm = p.adminCommission !== undefined ? Number(p.adminCommission) : Math.floor(amt * (commRate / 100));
+      const driver = p.driverPayout !== undefined ? Number(p.driverPayout) : (amt - comm);
+
+      totalCustomer += amt;
+      totalAdmin += comm;
+      totalDriver += driver;
+      count += 1;
+    });
+
+    return {
+      totalCustomer,
+      totalAdmin,
+      totalDriver,
+      count,
+    };
+  }, [filteredPayments]);
+
+  // ── NEWEST FIRST SORTING ACROSS ALL SECTIONS ──
+  const sortedBookings = useMemo(() => {
+    return [...bookings].sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (tb !== ta) return tb - ta;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [bookings]);
+
+  const sortedDrivers = useMemo(() => {
+    return [...drivers].sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (tb !== ta) return tb - ta;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [drivers]);
+
+  const sortedCustomers = useMemo(() => {
+    return [...customers].sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (tb !== ta) return tb - ta;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [customers]);
+
+  const sortedCars = useMemo(() => {
+    return [...cars].sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+  }, [cars]);
+
+  const sortedPayments = useMemo(() => {
+    return [...filteredPayments].sort((a, b) => {
+      const ta = a.rawDate ? new Date(a.rawDate).getTime() : (new Date(a.date).getTime() || 0);
+      const tb = b.rawDate ? new Date(b.rawDate).getTime() : (new Date(b.date).getTime() || 0);
+      if (tb !== ta) return tb - ta;
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
+  }, [filteredPayments]);
+
+  const carCommissionMap = useMemo(() => {
+    const map = {};
+    cars.forEach((c) => {
+      const rate = Number(c.commissionPercent ?? 12);
+      map[String(c.name).trim().toLowerCase()] = isNaN(rate) ? 12 : rate;
+    });
+    return map;
+  }, [cars]);
+
+  const getCarCommissionRate = useCallback((carName) => {
+    if (!carName) return 12;
+    return carCommissionMap[String(carName).trim().toLowerCase()] ?? 12;
+  }, [carCommissionMap]);
+
   const loadAdminData = useCallback(async () => {
     try {
       const statsRes = await api.get('/api/admin/dashboard-stats');
@@ -115,9 +276,33 @@ export default function AdminDashboard({ navigation }) {
 
       const carsRes = await api.get('/api/admin/cars');
       setCars(carsRes.data);
+      if (Array.isArray(carsRes.data)) {
+        setBulkCommissions(prev => {
+          const next = { ...prev };
+          carsRes.data.forEach(c => {
+            if (next[c.id] === undefined) {
+              next[c.id] = String(c.commissionPercent ?? 12);
+            }
+          });
+          return next;
+        });
+      }
 
       const paymentsRes = await api.get('/api/admin/payments');
       setPayments(paymentsRes.data);
+
+      try {
+        const settingsRes = await api.get('/api/admin/settings');
+        if (settingsRes.data) {
+          setQrCodeUrl(settingsRes.data.qrCodeUrl || '');
+          setUpiId(settingsRes.data.upiId || '9755339783@upi');
+          setAdvanceAmount(String(settingsRes.data.advanceAmount || '200'));
+          setHelpline1(settingsRes.data.helpline1 || '6261828036');
+          setHelpline2(settingsRes.data.helpline2 || '9755339783');
+        }
+      } catch (_sErr) {
+        // keep defaults
+      }
     } catch (e) {
       console.error('AdminDashboard: Failed to load admin data', e);
     } finally {
@@ -288,16 +473,18 @@ export default function AdminDashboard({ navigation }) {
     try {
       setLoading(true);
       setCarModalVisible(false);
+      const commNum = Number(carCommissionVal !== '' ? carCommissionVal : 12);
       const payload = { 
         name: carNameVal, 
         type: carTypeVal || 'Standard', 
         pricePerKm: Number(carPriceVal), 
         seats: Number(carSeatsVal || 4),
-        eta: '5 mins'
+        eta: '5 mins',
+        commissionPercent: isNaN(commNum) ? 12 : commNum,
       };
       if (editingCar) {
         await api.patch(`/api/admin/cars/${editingCar.id}`, payload);
-        Alert.alert('Success', 'Vehicle rates updated successfully.');
+        Alert.alert('Success', 'Vehicle rates & commission updated successfully.');
       } else {
         await api.post('/api/admin/cars', payload);
         Alert.alert('Success', 'New vehicle fleet added successfully.');
@@ -306,6 +493,23 @@ export default function AdminDashboard({ navigation }) {
     } catch (e) {
       setLoading(false);
       Alert.alert('Error', e.response?.data?.message || 'Action failed.');
+    }
+  };
+
+  const handleSaveBulkCommissions = async () => {
+    try {
+      setIsSavingBulkComm(true);
+      const list = Object.entries(bulkCommissions).map(([id, val]) => ({
+        id: Number(id),
+        commissionPercent: Number(val),
+      }));
+      await api.patch('/api/admin/cars/commissions/bulk', { commissions: list });
+      Alert.alert('Success', 'Fleet commission rates updated successfully!');
+      loadAdminData();
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to update commissions');
+    } finally {
+      setIsSavingBulkComm(false);
     }
   };
 
@@ -370,9 +574,15 @@ export default function AdminDashboard({ navigation }) {
     const distance = item.distance || '155.0';
     const date = item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '2026-05-18';
     const time = item.createdAt ? new Date(item.createdAt).toISOString().split('T')[1].substring(0,5) : '19:37';
-    const fare = item.fare || 1860;
-    const commission = Math.round(fare * 0.12);
-    const driverPayout = fare - commission;
+    const distNum = parseFloat(String(item.distance || '').replace(/[^0-9.]/g, '')) || 50;
+    const oneWayBase = Math.round(distNum * 12);
+    const doubleFare = oneWayBase * 2;
+    const roundTripKm = Math.round(distNum * 2);
+    const estToll = distNum >= 30 ? Math.round((distNum * 3.2) / 10) * 10 : 0;
+    const totalAdminQuote = doubleFare + estToll;
+    const commRate = getCarCommissionRate(item.carName || item.car);
+    const commission = Math.round(doubleFare * (commRate / 100));
+    const driverPayout = totalAdminQuote - commission;
     const isPending = item.status === 'Pending';
 
     return (
@@ -438,19 +648,48 @@ export default function AdminDashboard({ navigation }) {
           </View>
         )}
 
-        {/* Financials */}
-        <View style={styles.bcFinancials}>
-          <View style={styles.finCol}>
-            <Text style={styles.finLabel}>{t('admin.total_paid')?.toUpperCase()}</Text>
-            <Text style={styles.finValMain}>₹{fare}</Text>
+        {/* 2X Double Fare & Toll Breakdown Card */}
+        <View style={styles.bcDoubleQuoteCard}>
+          <View style={styles.bcQuoteHeaderRow}>
+            <Text style={styles.bcQuoteBadgeText}>🚕 2X RETURN FARE & TOLL QUOTE</Text>
+            <View style={styles.adminQuotePill}>
+              <Text style={styles.adminQuotePillText}>TELL CUSTOMER</Text>
+            </View>
           </View>
-          <View style={styles.finCol}>
-            <Text style={styles.finLabel}>{t('admin.commission')?.toUpperCase()}</Text>
-            <Text style={styles.finValComm}>₹{commission}</Text>
+
+          <View style={styles.quoteGrid}>
+            <View style={styles.quoteGridCol}>
+              <Text style={styles.quoteGridLabel}>1-WAY DISTANCE</Text>
+              <Text style={styles.quoteGridVal}>{distNum} KM</Text>
+            </View>
+            <View style={styles.quoteGridCol}>
+              <Text style={styles.quoteGridLabel}>2-WAY (2X)</Text>
+              <Text style={styles.quoteGridVal}>{roundTripKm} KM</Text>
+            </View>
+            <View style={styles.quoteGridCol}>
+              <Text style={styles.quoteGridLabel}>DOUBLE BASE (2X)</Text>
+              <Text style={styles.quoteGridVal}>₹{doubleFare}</Text>
+            </View>
+            <View style={styles.quoteGridCol}>
+              <Text style={styles.quoteGridLabel}>EST. TOLL (2-WAY)</Text>
+              <Text style={styles.quoteGridValBlue}>₹{estToll}</Text>
+            </View>
           </View>
-          <View style={styles.finCol}>
-            <Text style={styles.finLabel}>{t('admin.driver_payout_label')?.toUpperCase()}</Text>
-            <Text style={styles.finValDriver}>₹{driverPayout}</Text>
+
+          <View style={styles.quoteTotalRow}>
+            <View>
+              <Text style={styles.quoteTotalSub}>TELL CUSTOMER ON CALL</Text>
+              <Text style={styles.quoteTotalAmount}>₹{totalAdminQuote}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.quoteProfitSub}>ADMIN PROFIT ({commRate}%)</Text>
+              <Text style={styles.quoteProfitAmount}>₹{commission}</Text>
+            </View>
+          </View>
+
+          <View style={styles.driverPayoutSummaryRow}>
+            <Text style={styles.driverPayoutSummaryLabel}>Driver Payout (Base - Comm + Toll):</Text>
+            <Text style={styles.driverPayoutSummaryVal}>₹{driverPayout}</Text>
           </View>
         </View>
 
@@ -646,61 +885,375 @@ export default function AdminDashboard({ navigation }) {
     </View>
   );
 
-  const renderCarItem = ({ item }) => (
-    <View style={styles.carWebCard}>
-      <View style={styles.carImageContainer}>
-        <Text style={{ fontSize: 44 }}>🚖</Text>
-      </View>
-      <Text style={styles.carWebTitle}>{item.name.toUpperCase()}</Text>
-      <Text style={styles.carWebSubtitle}>{item.type.toUpperCase()} • {item.seats} SEATS</Text>
-      <View style={styles.rateBadge}>
-        <Text style={styles.rateLabel}>RATE</Text>
-        <Text style={styles.rateVal}>₹{item.pricePerKm}/km</Text>
-      </View>
-      
-      <View style={{ flexDirection: 'row', width: '100%', gap: 10 }}>
-        <TouchableOpacity 
-          style={[styles.updateCarBtn, { flex: 1 }]}
-          onPress={() => {
-            setEditingCar(item);
-            setCarNameVal(item.name);
-            setCarTypeVal(item.type);
-            setCarPriceVal(String(item.pricePerKm));
-            setCarSeatsVal(String(item.seats));
-            setCarModalVisible(true);
-          }}
-        >
-          <Text style={styles.updateCarBtnText}>UPDATE</Text>
-        </TouchableOpacity>
+function getAdminCarImage(car) {
+  if (car?.image && typeof car.image === 'string') {
+    if (car.image.startsWith('data:image/') || car.image.startsWith('http://') || car.image.startsWith('https://')) {
+      if (!car.image.includes('flaticon.com') && !car.image.includes('placehold.co')) {
+        return { uri: car.image };
+      }
+    }
+    if (car.image.includes('mini.png')) {
+      return require('../../../assets/mini.png');
+    }
+    if (car.image.includes('luxury.png')) {
+      return require('../../../assets/luxury.png');
+    }
+  }
 
-        <TouchableOpacity 
-          style={[styles.iconBtn, { backgroundColor: '#FEE2E2', paddingHorizontal: 12, justifyContent: 'center' }]}
-          onPress={() => handleDeleteCar(item.id)}
-        >
-          <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
-        </TouchableOpacity>
+  const name = String(car?.name || '').toLowerCase();
+  if (name.includes('mini')) return require('../../../assets/mini.png');
+  if (name.includes('luxury') || name.includes('lux')) return require('../../../assets/luxury.png');
+  if (car?.image && typeof car.image === 'string' && car.image.startsWith('data:image/')) {
+    return { uri: car.image };
+  }
+  return require('../../../assets/hero-car.jpg');
+}
+
+  const renderCarsCommissionHeader = () => {
+    return (
+      <View style={styles.commissionConfigCard}>
+        <View style={styles.commissionHeaderRow}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <Ionicons name="pie-chart" size={15} color={COLORS.primaryDark} />
+              <Text style={styles.commissionCardTitle}>VEHICLE-WISE COMMISSION SETTINGS</Text>
+            </View>
+            <Text style={styles.commissionCardSubtitle}>
+              Set category commission (%). Driver payout & platform profit update automatically.
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.saveBulkCommBtn}
+            onPress={handleSaveBulkCommissions}
+            disabled={isSavingBulkComm}
+          >
+            <Ionicons name="checkmark-circle-outline" size={13} color={COLORS.text} style={{ marginRight: 4 }} />
+            <Text style={styles.saveBulkCommBtnText}>
+              {isSavingBulkComm ? 'SAVING...' : 'SAVE ALL'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bulkCommScroll}>
+          {cars.map((c) => {
+            const currentVal = bulkCommissions[c.id] !== undefined ? bulkCommissions[c.id] : String(c.commissionPercent ?? 12);
+            const driverShare = Math.max(0, 100 - Number(currentVal || 0));
+            return (
+              <View key={c.id} style={styles.bulkCarItem}>
+                <View style={styles.bulkCarThumbContainer}>
+                  <Image source={getAdminCarImage(c)} style={styles.bulkCarThumb} resizeMode="contain" />
+                </View>
+                <Text style={styles.bulkCarName} numberOfLines={1}>{c.name}</Text>
+                <Text style={styles.bulkCarRate}>₹{c.pricePerKm}/km</Text>
+                
+                <View style={styles.bulkInputWrapper}>
+                  <Text style={styles.bulkInputPrefix}>Comm:</Text>
+                  <TextInput
+                    style={styles.bulkInput}
+                    keyboardType="numeric"
+                    value={String(currentVal)}
+                    onChangeText={(txt) => setBulkCommissions(prev => ({ ...prev, [c.id]: txt }))}
+                  />
+                  <Text style={styles.bulkInputSuffix}>%</Text>
+                </View>
+                <Text style={styles.bulkDriverShare}>
+                  Driver: <Text style={{ color: COLORS.success, fontWeight: '900' }}>{driverShare}%</Text>
+                </Text>
+              </View>
+            );
+          })}
+        </ScrollView>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const renderCarItem = ({ item }) => {
+    const carImgSource = getAdminCarImage(item);
+    const commRate = Number(item.commissionPercent ?? 12);
+    const driverPayoutRate = Math.max(0, 100 - commRate);
+    return (
+      <View style={styles.carWebCard}>
+        <View style={styles.carImageContainer}>
+          <Image
+            source={carImgSource}
+            style={styles.carRealImageWeb}
+            resizeMode="contain"
+          />
+        </View>
+        <Text style={styles.carWebTitle}>{item.name.toUpperCase()}</Text>
+        <Text style={styles.carWebSubtitle}>{item.type.toUpperCase()} • {item.seats} SEATS</Text>
+        
+        {/* Rate & Commission Summary Box matching web */}
+        <View style={styles.carStatsBox}>
+          <View style={styles.carStatRow}>
+            <Text style={styles.carStatLabel}>RATE</Text>
+            <Text style={styles.carStatValRate}>₹{item.pricePerKm}/km</Text>
+          </View>
+          <View style={styles.carStatDivider} />
+          <View style={styles.carStatRow}>
+            <Text style={styles.carStatLabel}>COMMISSION</Text>
+            <View style={styles.commBadge}>
+              <Text style={styles.commBadgeText}>{commRate}%</Text>
+            </View>
+          </View>
+          <View style={[styles.carStatRow, { marginTop: 4 }]}>
+            <Text style={styles.carStatSubLabel}>Driver Payout</Text>
+            <Text style={styles.driverPayoutVal}>{driverPayoutRate}%</Text>
+          </View>
+        </View>
+        
+        <View style={{ flexDirection: 'row', width: '100%', gap: 10 }}>
+          <TouchableOpacity 
+            style={[styles.updateCarBtn, { flex: 1 }]}
+            onPress={() => {
+              setEditingCar(item);
+              setCarNameVal(item.name);
+              setCarTypeVal(item.type);
+              setCarPriceVal(String(item.pricePerKm));
+              setCarSeatsVal(String(item.seats));
+              setCarCommissionVal(String(item.commissionPercent ?? 12));
+              setCarModalVisible(true);
+            }}
+          >
+            <Text style={styles.updateCarBtnText}>UPDATE</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.iconBtn, { backgroundColor: '#FEE2E2', paddingHorizontal: 12, justifyContent: 'center' }]}
+            onPress={() => handleDeleteCar(item.id)}
+          >
+            <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderPaymentsDateFilterHeader = () => {
+    return (
+      <View style={styles.payFilterContainer}>
+        {/* Date Filter Bar */}
+        <View style={styles.payFilterHeaderRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="calendar-outline" size={16} color={COLORS.primaryDark} />
+            <Text style={styles.payFilterHeading}>FILTER BY DATE</Text>
+          </View>
+          <Text style={styles.payFilterSubheading}>
+            {selectedPaymentDate === 'ALL'
+              ? `All Dates (${payments.length})`
+              : selectedPaymentDate === 'TODAY'
+                ? `Today • ${todayStr}`
+                : selectedPaymentDate === 'YESTERDAY'
+                  ? `Yesterday • ${yesterdayStr}`
+                  : selectedPaymentDate}
+          </Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.payDatePillsScroll}>
+          {/* ALL DATES Pill */}
+          <TouchableOpacity
+            style={[styles.payDatePill, selectedPaymentDate === 'ALL' && styles.payDatePillActive]}
+            onPress={() => setSelectedPaymentDate('ALL')}
+          >
+            <Ionicons
+              name="infinite-outline"
+              size={12}
+              color={selectedPaymentDate === 'ALL' ? COLORS.text : COLORS.textMuted}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[styles.payDatePillText, selectedPaymentDate === 'ALL' && styles.payDatePillTextActive]}>
+              All Dates ({payments.length})
+            </Text>
+          </TouchableOpacity>
+
+          {/* TODAY Pill */}
+          <TouchableOpacity
+            style={[styles.payDatePill, selectedPaymentDate === 'TODAY' && styles.payDatePillActive]}
+            onPress={() => setSelectedPaymentDate('TODAY')}
+          >
+            <Ionicons
+              name="flash"
+              size={12}
+              color={selectedPaymentDate === 'TODAY' ? '#D97706' : COLORS.textMuted}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[styles.payDatePillText, selectedPaymentDate === 'TODAY' && styles.payDatePillTextActive]}>
+              Today
+            </Text>
+          </TouchableOpacity>
+
+          {/* YESTERDAY Pill */}
+          <TouchableOpacity
+            style={[styles.payDatePill, selectedPaymentDate === 'YESTERDAY' && styles.payDatePillActive]}
+            onPress={() => setSelectedPaymentDate('YESTERDAY')}
+          >
+            <Ionicons
+              name="time-outline"
+              size={12}
+              color={selectedPaymentDate === 'YESTERDAY' ? COLORS.text : COLORS.textMuted}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[styles.payDatePillText, selectedPaymentDate === 'YESTERDAY' && styles.payDatePillTextActive]}>
+              Yesterday
+            </Text>
+          </TouchableOpacity>
+
+          {/* Each Individual Date Found in Payments */}
+          {availablePaymentDates.map((dateStr) => {
+            const isSelected = selectedPaymentDate === dateStr;
+            const countForDate = payments.filter(p => normalizeDateStr(p.date || p.rawDate) === dateStr).length;
+            return (
+              <TouchableOpacity
+                key={dateStr}
+                style={[styles.payDatePill, isSelected && styles.payDatePillActive]}
+                onPress={() => setSelectedPaymentDate(dateStr)}
+              >
+                <Ionicons
+                  name="calendar"
+                  size={12}
+                  color={isSelected ? COLORS.primaryDark : COLORS.textMuted}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.payDatePillText, isSelected && styles.payDatePillTextActive]}>
+                  {dateStr} ({countForDate})
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Selected Date Revenue Summary Card: Answers "kis din kitna payment aaya" */}
+        <View style={styles.payDateSummaryCard}>
+          <View style={styles.payDateSummaryTop}>
+            <View style={{ flex: 1, paddingRight: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                <Ionicons name="bar-chart" size={14} color={COLORS.primaryDark} />
+                <Text style={styles.payDateSummaryTitle}>
+                  {selectedPaymentDate === 'ALL'
+                    ? 'ALL DATES REVENUE TOTAL'
+                    : `COLLECTION: ${selectedPaymentDate === 'TODAY' ? todayStr : selectedPaymentDate === 'YESTERDAY' ? yesterdayStr : selectedPaymentDate}`}
+                </Text>
+              </View>
+              <Text style={styles.payDateSummarySubLabel}>
+                {paymentDateSummary.count > 0 
+                  ? `Detailed earnings summary for ${paymentDateSummary.count} completed ride(s)` 
+                  : 'No payment transactions recorded for this selected date'}
+              </Text>
+            </View>
+            <View style={styles.payRideCountBadge}>
+              <Text style={styles.payRideCountBadgeText}>{paymentDateSummary.count} RIDES</Text>
+            </View>
+          </View>
+
+          <View style={styles.payDateSummaryMetricsRow}>
+            {/* Total Collected */}
+            <View style={styles.payDateMetricBox}>
+              <Text style={styles.payDateMetricLabel}>TOTAL COLLECTED</Text>
+              <Text style={styles.payDateMetricValTotal}>₹{paymentDateSummary.totalCustomer.toLocaleString('en-IN')}</Text>
+              <Text style={styles.payDateMetricSub}>Customer Paid</Text>
+            </View>
+
+            <View style={styles.payDateMetricDivider} />
+
+            {/* Admin Commission */}
+            <View style={styles.payDateMetricBox}>
+              <Text style={styles.payDateMetricLabel}>ADMIN COMMISSION</Text>
+              <Text style={styles.payDateMetricValAdmin}>₹{paymentDateSummary.totalAdmin.toLocaleString('en-IN')}</Text>
+              <Text style={styles.payDateMetricSub}>Platform Cut</Text>
+            </View>
+
+            <View style={styles.payDateMetricDivider} />
+
+            {/* Driver Payout */}
+            <View style={styles.payDateMetricBox}>
+              <Text style={styles.payDateMetricLabel}>DRIVER PAYOUT</Text>
+              <Text style={styles.payDateMetricValDriver}>₹{paymentDateSummary.totalDriver.toLocaleString('en-IN')}</Text>
+              <Text style={styles.payDateMetricSub}>Driver Share</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   const renderPaymentItem = ({ item }) => {
-    const amt = item.amount || 120;
-    const comm = Math.round(amt * 0.12);
-    const driverPay = amt - comm;
+    const amt = Number(item.amount || 0);
+    const commRate = item.commissionPercent !== undefined 
+      ? item.commissionPercent 
+      : getCarCommissionRate(item.carName || item.car);
+    const comm = item.adminCommission !== undefined 
+      ? item.adminCommission 
+      : Math.floor(amt * (commRate / 100));
+    const driverPay = item.driverPayout !== undefined 
+      ? item.driverPayout 
+      : (amt - comm);
+
+    const tripId = item.bookingId 
+      ? (String(item.bookingId).startsWith('cmv') ? `#${String(item.bookingId).slice(-5).toUpperCase()}` : `#${item.bookingId}`)
+      : `#${item.id || ''}`;
+
+    const carDisplay = item.carName ? item.carName.toUpperCase() : 'STANDARD';
+    const driverDisplay = item.driverName ? item.driverName : 'Assigned Driver';
 
     return (
       <View style={styles.paymentCardWeb}>
-        <View style={styles.paymentIconCircle}>
-          <Ionicons name="card-outline" size={18} color="#22C55E" />
+        {/* Top Header Row */}
+        <View style={styles.payHeaderRow}>
+          <View style={styles.paymentIconCircle}>
+            <Ionicons name="card-outline" size={18} color="#22C55E" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Text style={styles.payTripTitle}>Trip Payment {tripId}</Text>
+              <View style={styles.payCarBadge}>
+                <Text style={styles.payCarBadgeText}>{carDisplay}</Text>
+              </View>
+            </View>
+            <Text style={styles.payCustomerText}>
+              👤 {item.customer || 'Customer'} • 📅 {item.date || 'Live'}
+            </Text>
+          </View>
+          <View style={styles.payMethodBadge}>
+            <Text style={styles.payMethodBadgeText}>{item.method?.toUpperCase() || 'ONLINE'}</Text>
+          </View>
         </View>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.payTripTitle}>Trip Payment #{item.id || ''}</Text>
-          <Text style={styles.payCustomerText}>{item.customer || 'Priya Singh'} • {item.date || '22 May 2026'}</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.paySplitText}>Admin: ₹{comm} | Driver: ₹{driverPay}</Text>
-          <Text style={styles.payAmountText}>₹{amt}</Text>
-          <Text style={styles.payMethodText}>{item.method?.toUpperCase() || 'WALLET'}</Text>
+
+        {/* Route Preview (if available) */}
+        {(item.pickup || item.drop) ? (
+          <View style={styles.payRouteBox}>
+            <Ionicons name="navigate-circle-outline" size={13} color={COLORS.primaryDark} style={{ marginRight: 5 }} />
+            <Text style={styles.payRouteText} numberOfLines={1}>
+              {item.pickup || 'Pickup'} ➔ {item.drop || 'Drop'}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* 3-Column Split Breakdown Box */}
+        <View style={styles.payBreakdownBox}>
+          {/* 1. Total Paid by Customer */}
+          <View style={styles.payBreakdownCol}>
+            <Text style={styles.payBreakdownLabel}>TOTAL PAID</Text>
+            <Text style={styles.payTotalPaidVal}>₹{amt}</Text>
+            <Text style={styles.payBreakdownSub}>Customer</Text>
+          </View>
+
+          <View style={styles.payBreakdownDivider} />
+
+          {/* 2. Admin Commission */}
+          <View style={styles.payBreakdownCol}>
+            <Text style={styles.payBreakdownLabel}>ADMIN ({commRate}%)</Text>
+            <Text style={styles.payAdminCommVal}>₹{comm}</Text>
+            <Text style={styles.payBreakdownSub}>Platform Cut</Text>
+          </View>
+
+          <View style={styles.payBreakdownDivider} />
+
+          {/* 3. Driver Payout */}
+          <View style={styles.payBreakdownCol}>
+            <Text style={styles.payBreakdownLabel}>DRIVER SHARE</Text>
+            <Text style={styles.payDriverPayoutVal}>₹{driverPay}</Text>
+            <Text style={styles.payBreakdownSub} numberOfLines={1}>👤 {driverDisplay}</Text>
+          </View>
         </View>
       </View>
     );
@@ -753,6 +1306,161 @@ export default function AdminDashboard({ navigation }) {
       </TouchableOpacity>
     </ScrollView>
   );
+
+  const handlePickQrImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          setQrCodeUrl(`data:image/jpeg;base64,${asset.base64}`);
+        } else {
+          setQrCodeUrl(asset.uri);
+        }
+      }
+    } catch (_err) {
+      Alert.alert('Notice', 'Could not open image picker.');
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      setSavingSettings(true);
+      const res = await api.patch('/api/admin/settings', {
+        qrCodeUrl: qrCodeUrl ? qrCodeUrl.trim() : null,
+        upiId: upiId ? upiId.trim() : '9755339783@upi',
+        advanceAmount: parseFloat(advanceAmount) || 200,
+        helpline1: helpline1 ? helpline1.trim() : '6261828036',
+        helpline2: helpline2 ? helpline2.trim() : '9755339783',
+      });
+      if (res?.data?.settings) {
+        setQrCodeUrl(res.data.settings.qrCodeUrl || '');
+        setUpiId(res.data.settings.upiId || '9755339783@upi');
+        setAdvanceAmount(String(res.data.settings.advanceAmount ?? '200'));
+        setHelpline1(res.data.settings.helpline1 || '6261828036');
+        setHelpline2(res.data.settings.helpline2 || '9755339783');
+      }
+      Alert.alert('Success', 'Admin QR Code & Helpline settings saved successfully!');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to save settings. Please try again.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const renderSettingsSection = () => {
+    const previewQr = qrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`upi://pay?pa=${upiId || '9755339783@upi'}&pn=SafarSetu&am=${advanceAmount || 200}&cu=INR`)}`;
+    return (
+      <ScrollView style={{ padding: 16 }} contentContainerStyle={{ paddingBottom: 60 }}>
+        <View style={styles.settingsCard}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <Ionicons name="qr-code" size={26} color={COLORS.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingsTitle}>UPI QR Code & Advance Booking</Text>
+              <Text style={styles.settingsSubtitle}>Configure payment QR & helpline shown to customers</Text>
+            </View>
+          </View>
+
+          {/* QR PREVIEW */}
+          <View style={styles.qrPreviewBox}>
+            <Image
+              source={{ uri: previewQr }}
+              style={styles.qrPreviewImage}
+              resizeMode="contain"
+            />
+            <Text style={{ fontSize: 11, color: COLORS.textMuted, marginTop: 8 }}>
+              {qrCodeUrl ? 'Custom Admin Uploaded QR' : 'Auto-generated Dynamic UPI QR'}
+            </Text>
+          </View>
+
+          <TouchableOpacity style={styles.uploadQrBtn} onPress={handlePickQrImage}>
+            <Ionicons name="cloud-upload-outline" size={18} color="#2563EB" />
+            <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 13 }}>
+              Select QR Image from Gallery
+            </Text>
+          </TouchableOpacity>
+
+          {qrCodeUrl ? (
+            <TouchableOpacity 
+              style={{ alignSelf: 'center', marginBottom: 16 }} 
+              onPress={() => setQrCodeUrl('')}
+            >
+              <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '600' }}>
+                Reset to Auto-generated UPI QR
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* UPI ID */}
+          <Text style={styles.settingsLabel}>Admin UPI ID</Text>
+          <TextInput
+            style={styles.settingsInput}
+            value={upiId}
+            onChangeText={setUpiId}
+            placeholder="e.g. 9755339783@upi"
+            placeholderTextColor="#9CA3AF"
+            autoCapitalize="none"
+          />
+
+          {/* Advance Booking Amount */}
+          <Text style={styles.settingsLabel}>Advance Token Amount (₹)</Text>
+          <TextInput
+            style={styles.settingsInput}
+            value={advanceAmount}
+            onChangeText={setAdvanceAmount}
+            placeholder="200"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+          />
+
+          {/* Primary Helpline */}
+          <Text style={styles.settingsLabel}>Helpline Number 1 (Call & WhatsApp)</Text>
+          <TextInput
+            style={styles.settingsInput}
+            value={helpline1}
+            onChangeText={setHelpline1}
+            placeholder="6261828036"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="phone-pad"
+          />
+
+          {/* Secondary Helpline */}
+          <Text style={styles.settingsLabel}>Helpline Number 2 (Call)</Text>
+          <TextInput
+            style={styles.settingsInput}
+            value={helpline2}
+            onChangeText={setHelpline2}
+            placeholder="9755339783"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="phone-pad"
+          />
+
+          <TouchableOpacity
+            style={[styles.saveSettingsBtn, savingSettings && { opacity: 0.7 }]}
+            onPress={handleSaveSettings}
+            disabled={savingSettings}
+          >
+            {savingSettings ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" />
+                <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>
+                  SAVE QR & HELPLINE SETTINGS
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  };
 
   const renderDashboardCharts = () => {
     if (!stats) return null;
@@ -912,15 +1620,19 @@ export default function AdminDashboard({ navigation }) {
 
       {/* TOP HEADER */}
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={styles.logoIcon}><Ionicons name="car" size={16} color="#000" /></View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: COLORS.border }}
+            resizeMode="contain"
+          />
           <Text style={styles.logoText}>SAFAR<Text style={styles.logoBold}>SETU</Text></Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.langBadge} onPress={toggleLanguage}>
-            <Ionicons name="globe-outline" size={12} color={COLORS.text} />
-            <Text style={styles.langText}>
-              {locale === 'en' ? 'English' : locale === 'hi' ? 'हिंदी' : 'निमड़ी'} ▼
+          <TouchableOpacity style={styles.langCircleBtn} onPress={toggleLanguage} activeOpacity={0.8}>
+            <Ionicons name="globe-outline" size={15} color={COLORS.text} />
+            <Text style={styles.langCircleCode}>
+              {locale === 'en' ? 'EN' : locale === 'hi' ? 'HI' : 'NIM'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
@@ -942,7 +1654,7 @@ export default function AdminDashboard({ navigation }) {
                 onPress={() => setActiveTab(tab)}
               >
                 <Text style={[styles.menuItemText, activeTab === tab && styles.menuItemTextActive]}>
-                  {tab === 'Dashboard' ? '⊞ ' : tab === 'Bookings' ? '📄 ' : ''}{label}
+                  {tab === 'Dashboard' ? '⊞ ' : tab === 'Bookings' ? '📄 ' : tab === 'Settings' ? '⚙️ ' : ''}{label}
                 </Text>
               </TouchableOpacity>
             )
@@ -957,6 +1669,8 @@ export default function AdminDashboard({ navigation }) {
         renderDashboardCharts()
       ) : activeTab === 'Reports' ? (
         renderReportSection()
+      ) : activeTab === 'Settings' ? (
+        renderSettingsSection()
       ) : (
         <View style={styles.listSection}>
           {/* Section Headers with ADD buttons matching web */}
@@ -976,7 +1690,9 @@ export default function AdminDashboard({ navigation }) {
             {activeTab === 'Payments' ? (
               <View style={styles.webWalletBox}>
                 <Text style={styles.webWalletLabel}>ADMIN WALLET BALANCE</Text>
-                <Text style={styles.webWalletVal}>₹124,564</Text>
+                <Text style={styles.webWalletVal}>
+                  ₹{(stats?.walletBalance ? Number(stats.walletBalance) : payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)).toLocaleString('en-IN')}
+                </Text>
               </View>
             ) : (
               <TouchableOpacity 
@@ -1012,6 +1728,7 @@ export default function AdminDashboard({ navigation }) {
                     setCarTypeVal('Standard');
                     setCarPriceVal('');
                     setCarSeatsVal('4');
+                    setCarCommissionVal('12');
                     setCarModalVisible(true);
                   }
                 }}
@@ -1042,16 +1759,23 @@ export default function AdminDashboard({ navigation }) {
           </View>
 
           <FlatList
+            ListHeaderComponent={
+              activeTab === 'Cars' 
+                ? renderCarsCommissionHeader 
+                : activeTab === 'Payments'
+                  ? renderPaymentsDateFilterHeader
+                  : null
+            }
             data={
               activeTab === 'Bookings' 
-                ? bookings.filter(b => 
+                ? sortedBookings.filter(b => 
                     (b.pickup || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                     (b.drop || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                     (b.customer || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                     (b.phone || '').toLowerCase().includes(searchQuery.toLowerCase())
                   ) 
                 : activeTab === 'Drivers' 
-                  ? drivers.filter(d => 
+                  ? sortedDrivers.filter(d => 
                       (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                       (d.phone || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                       (d.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1059,20 +1783,17 @@ export default function AdminDashboard({ navigation }) {
                       (d.vehicleNumber || '').toLowerCase().includes(searchQuery.toLowerCase())
                     ) 
                   : activeTab === 'Customers'
-                    ? customers.filter(c => 
+                    ? sortedCustomers.filter(c => 
                         (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                         (c.phone || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                         (c.location || '').toLowerCase().includes(searchQuery.toLowerCase())
                       )
                     : activeTab === 'Cars'
-                      ? cars.filter(c => 
+                      ? sortedCars.filter(c => 
                           (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (c.type || '').toLowerCase().includes(searchQuery.toLowerCase())
                         )
-                      : payments.filter(p => 
-                          (p.customer || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (p.method || '').toLowerCase().includes(searchQuery.toLowerCase())
-                        )
+                      : sortedPayments
             }
             keyExtractor={(item, index) => String(item.id || index)}
             renderItem={
@@ -1087,7 +1808,16 @@ export default function AdminDashboard({ navigation }) {
                       : renderPaymentItem
             }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
-            ListEmptyComponent={<View style={styles.emptyContainer}><Text style={styles.emptyText}>No data available.</Text></View>}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="file-tray-outline" size={36} color={COLORS.textMuted} style={{ marginBottom: 8 }} />
+                <Text style={styles.emptyText}>
+                  {activeTab === 'Payments' && selectedPaymentDate !== 'ALL'
+                    ? `No payments recorded on ${selectedPaymentDate === 'TODAY' ? todayStr : selectedPaymentDate === 'YESTERDAY' ? yesterdayStr : selectedPaymentDate}.`
+                    : 'No records available.'}
+                </Text>
+              </View>
+            }
             contentContainerStyle={styles.listContent}
           />
         </View>
@@ -1509,8 +2239,30 @@ export default function AdminDashboard({ navigation }) {
               </View>
             </View>
 
+            {/* COMMISSION PERCENTAGE INPUT (MATCHES WEB) */}
+            <View style={styles.inputGroup}>
+              <Ionicons name="pie-chart-outline" size={16} color={COLORS.primaryDark} style={styles.inputIcon} />
+              <TextInput 
+                style={styles.modalInput} 
+                placeholder="Commission Percentage (e.g. 12)" 
+                placeholderTextColor={COLORS.textMuted} 
+                keyboardType="numeric" 
+                value={carCommissionVal} 
+                onChangeText={setCarCommissionVal} 
+              />
+              <Text style={{ fontSize: 13, fontWeight: '900', color: COLORS.primaryDark, marginRight: 8 }}>%</Text>
+            </View>
+
+            <View style={styles.modalCommSplitBox}>
+              <Text style={styles.modalCommSplitText}>
+                Platform Cut: <Text style={{ color: COLORS.primaryDark, fontWeight: '900' }}>{Number(carCommissionVal || 12)}%</Text>
+                {'   |   '}
+                Driver Payout: <Text style={{ color: COLORS.success, fontWeight: '900' }}>{Math.max(0, 100 - Number(carCommissionVal || 12))}%</Text>
+              </Text>
+            </View>
+
             <TouchableOpacity style={styles.btnAssignWeb} onPress={handleSaveCar}>
-              <Text style={styles.btnAssignTextWeb}>{editingCar ? 'UPDATE RATES' : 'ADD VEHICLE'}</Text>
+              <Text style={styles.btnAssignTextWeb}>{editingCar ? 'UPDATE FLEET CATEGORY' : 'ADD VEHICLE'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1586,8 +2338,28 @@ const styles = StyleSheet.create({
   logoText: { fontSize: 16, fontWeight: '400', color: COLORS.text },
   logoBold: { fontWeight: '900' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  langBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EBE5D8', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 },
-  langText: { fontSize: 12, color: COLORS.text, fontWeight: '600' },
+  langCircleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  langCircleCode: {
+    fontSize: 8,
+    color: COLORS.primaryDark,
+    fontWeight: '900',
+    marginTop: 1,
+  },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 },
   logoutText: { fontSize: 12, color: COLORS.danger, fontWeight: 'bold' },
   menuScroll: { paddingHorizontal: 20, gap: 10, paddingBottom: 10 },
@@ -1711,7 +2483,23 @@ const styles = StyleSheet.create({
 
   // Cars UI (Image 3)
   carWebCard: { backgroundColor: COLORS.card, borderRadius: 20, padding: 20, marginBottom: 15, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2, alignItems: 'center' },
-  carImageContainer: { width: 100, height: 70, backgroundColor: '#F9F7F3', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  carImageContainer: { 
+    width: 150, 
+    height: 95, 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 16, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#F0EBE0',
+    overflow: 'hidden',
+    padding: 6,
+  },
+  carRealImageWeb: {
+    width: '100%',
+    height: '100%',
+  },
   carWebTitle: { fontSize: 18, fontWeight: '900', color: COLORS.text, letterSpacing: 0.5, marginBottom: 4 },
   carWebSubtitle: { fontSize: 10, fontWeight: '800', color: COLORS.textMuted, marginBottom: 14 },
   rateBadge: { flexDirection: 'row', backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6, marginBottom: 16 },
@@ -1720,14 +2508,472 @@ const styles = StyleSheet.create({
   updateCarBtn: { backgroundColor: COLORS.primary, width: '100%', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   updateCarBtnText: { fontSize: 12, fontWeight: '900', color: COLORS.text },
 
+  // Rate & Commission Box on Car Card (matching web)
+  carStatsBox: {
+    backgroundColor: '#F8F6F0',
+    borderRadius: 14,
+    padding: 12,
+    width: '100%',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#EFE9DE',
+  },
+  carStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  carStatLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+  },
+  carStatValRate: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#D97706',
+  },
+  carStatDivider: {
+    height: 1,
+    backgroundColor: '#E5DFD4',
+    marginVertical: 6,
+  },
+  commBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  commBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#16A34A',
+  },
+  carStatSubLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  driverPayoutVal: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+
+  // Fleet Commission Configuration Panel (matching web)
+  commissionConfigCard: {
+    backgroundColor: '#FFFDF9',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#F3E5C8',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  commissionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  commissionCardTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: 0.4,
+  },
+  commissionCardSubtitle: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  saveBulkCommBtn: {
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  saveBulkCommBtnText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: 0.5,
+  },
+  bulkCommScroll: {
+    gap: 10,
+    paddingRight: 6,
+  },
+  bulkCarItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#EFE8DB',
+    width: 120,
+    alignItems: 'center',
+  },
+  bulkCarThumbContainer: {
+    width: 60,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  bulkCarThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  bulkCarName: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  bulkCarRate: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+    marginBottom: 6,
+  },
+  bulkInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F5EE',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E8E2D5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    width: '100%',
+    marginBottom: 4,
+  },
+  bulkInputPrefix: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.textMuted,
+  },
+  bulkInput: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '900',
+    color: COLORS.text,
+    textAlign: 'right',
+    padding: 0,
+    marginHorizontal: 2,
+  },
+  bulkInputSuffix: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+  },
+  bulkDriverShare: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    textAlign: 'center',
+  },
+
+  // Modal Commission Split
+  modalCommSplitBox: {
+    backgroundColor: '#F9F7F2',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#EFE8DA',
+    alignItems: 'center',
+  },
+  modalCommSplitText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+
   // Payments UI (Image 4)
-  paymentCardWeb: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.card, borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  paymentIconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#D1FAE5', justifyContent: 'center', alignItems: 'center' },
-  payTripTitle: { fontSize: 14, fontWeight: '900', color: COLORS.text },
-  payCustomerText: { fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
-  paySplitText: { fontSize: 9, fontWeight: '800', color: COLORS.textMuted, marginBottom: 4 },
-  payAmountText: { fontSize: 16, fontWeight: '900', color: COLORS.success },
-  payMethodText: { fontSize: 9, fontWeight: '900', color: COLORS.primaryDark, marginTop: 2 },
+  paymentCardWeb: { 
+    backgroundColor: COLORS.card, 
+    borderRadius: 20, 
+    padding: 16, 
+    marginBottom: 14, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.04, 
+    shadowRadius: 8, 
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F0EBE0',
+  },
+  payHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  paymentIconCircle: { 
+    width: 38, 
+    height: 38, 
+    borderRadius: 19, 
+    backgroundColor: '#D1FAE5', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  payTripTitle: { 
+    fontSize: 14, 
+    fontWeight: '900', 
+    color: COLORS.text 
+  },
+  payCarBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  payCarBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#D97706',
+  },
+  payCustomerText: { 
+    fontSize: 11, 
+    color: COLORS.textMuted, 
+    marginTop: 2 
+  },
+  payMethodBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  payMethodBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+    letterSpacing: 0.5,
+  },
+  payRouteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9F7F2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  payRouteText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.text,
+    flex: 1,
+  },
+  payBreakdownBox: {
+    flexDirection: 'row',
+    backgroundColor: '#F8F6F0',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#EFE9DE',
+  },
+  payBreakdownCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  payBreakdownDivider: {
+    width: 1,
+    height: 34,
+    backgroundColor: '#E5DFD4',
+  },
+  payBreakdownLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  payTotalPaidVal: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  payAdminCommVal: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#D97706',
+  },
+  payDriverPayoutVal: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  payBreakdownSub: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+
+  // Payment Date Filter & Day Summary styles
+  payFilterContainer: {
+    marginBottom: 16,
+  },
+  payFilterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  payFilterHeading: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: 0.5,
+  },
+  payFilterSubheading: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+  },
+  payDatePillsScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 10,
+    paddingHorizontal: 2,
+  },
+  payDatePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E2D5',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  payDatePillActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primaryDark,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  payDatePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  payDatePillTextActive: {
+    color: COLORS.text,
+    fontWeight: '900',
+  },
+  payDateSummaryCard: {
+    backgroundColor: '#FFFDF8',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#F3E5C8',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    marginTop: 2,
+  },
+  payDateSummaryTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  payDateSummaryTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: 0.3,
+  },
+  payDateSummarySubLabel: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  payRideCountBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  payRideCountBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#16A34A',
+  },
+  payDateSummaryMetricsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F8F6F0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#EFE9DE',
+  },
+  payDateMetricBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  payDateMetricDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#E5DFD4',
+  },
+  payDateMetricLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.textMuted,
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  payDateMetricValTotal: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  payDateMetricValAdmin: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#D97706',
+  },
+  payDateMetricValDriver: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  payDateMetricSub: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
 
   // Reports UI
   reportHeaderCard: { backgroundColor: '#FEF3C7', borderRadius: 24, padding: 24, alignItems: 'center', marginBottom: 20, gap: 8 },
@@ -1807,5 +3053,198 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, 
     borderColor: '#E5E7EB', 
     borderStyle: 'dashed',
+  },
+
+  // QR & Helpline Settings Card Styles
+  settingsCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  settingsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  settingsSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  qrPreviewBox: {
+    alignItems: 'center',
+    marginVertical: 14,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  qrPreviewImage: {
+    width: 190,
+    height: 190,
+    borderRadius: 12,
+    backgroundColor: '#FFF',
+  },
+  uploadQrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    marginBottom: 14,
+  },
+  settingsLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  settingsInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: COLORS.text,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 14,
+  },
+  saveSettingsBtn: {
+    backgroundColor: COLORS.primary,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
+  // 2X Double Quote Card Styles
+  bcDoubleQuoteCard: {
+    backgroundColor: '#FEF9EE',
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    borderRadius: 16,
+    padding: 14,
+    marginVertical: 10,
+  },
+  bcQuoteHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+    marginBottom: 8,
+  },
+  bcQuoteBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#92400E',
+    letterSpacing: 0.5,
+  },
+  adminQuotePill: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  adminQuotePillText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 0.5,
+  },
+  quoteGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 8,
+    marginBottom: 10,
+  },
+  quoteGridCol: {
+    width: '50%',
+  },
+  quoteGridLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: COLORS.textMuted,
+    marginBottom: 2,
+  },
+  quoteGridVal: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  quoteGridValBlue: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#1D4ED8',
+  },
+  quoteTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#FDE68A',
+  },
+  quoteTotalSub: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  quoteTotalAmount: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#000',
+  },
+  quoteProfitSub: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  quoteProfitAmount: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+  },
+  driverPayoutSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(253, 230, 138, 0.6)',
+  },
+  driverPayoutSummaryLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  driverPayoutSummaryVal: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#059669',
   },
 });

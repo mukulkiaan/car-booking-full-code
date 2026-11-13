@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SafarSetu — Official Ready Video Studio & Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body {
+      font-family: 'Outfit', 'Noto Sans Devanagari', sans-serif;
+      background: radial-gradient(circle at 50% 20%, #111827 0%, #030712 100%);
+      color: #f3f4f6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 10px;
+      overflow-x: hidden;
+    }
+
+    /* Studio Header */
+    .studio-header {
+      text-align: center;
+      margin-bottom: 16px;
+      max-width: 900px;
+      width: 100%;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .title {
+      font-size: 26px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #ffffff 0%, #fbbf24 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+
+    /* Video Player Container */
+    .player-wrapper {
+      position: relative;
+      background: #000;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px rgba(245, 158, 11, 0.15);
+      border: 2px solid rgba(245, 158, 11, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: width 0.3s ease, height 0.3s ease;
+    }
+    .player-wrapper.landscape {
+      width: 854px;
+      height: 480px;
+      max-width: 95vw;
+      max-height: 56vw;
+    }
+    .player-wrapper.portrait {
+      width: 360px;
+      height: 640px;
+      max-height: 85vh;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* Floating Overlay Controls */
+    .overlay-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 60%, transparent 100%);
+      padding: 16px 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+
+    /* Progress bar */
+    .progress-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 999px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .left-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ctrl-btn {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .ctrl-btn:hover {
+      background: rgba(245, 158, 11, 0.3);
+      border-color: #f59e0b;
+      transform: translateY(-1px);
+    }
+    .ctrl-btn.active {
+      background: #f59e0b;
+      color: #000;
+      border-color: #f59e0b;
+    }
+    .time-display {
+      font-size: 12px;
+      font-weight: 800;
+      color: #d1d5db;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Studio Tool Bar */
+    .studio-bar {
+      margin-top: 18px;
+      width: 100%;
+      max-width: 854px;
+      background: rgba(17, 24, 39, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      padding: 14px 20px;
+      border-radius: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .bar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bar-label {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #9ca3af;
+    }
+
+    /* Download Video Action */
+    .record-btn {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+      transition: all 0.2s;
+    }
+    .record-btn:hover {
+      transform: scale(1.03);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+    }
+    .record-btn.recording {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Scene Navigation Pills */
+    .scene-pills {
+      margin-top: 14px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 854px;
+    }
+    .scene-pill {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #9ca3af;
+      transition: all 0.15s;
+    }
+    .scene-pill:hover, .scene-pill.active {
+      background: rgba(245, 158, 11, 0.25);
+      border-color: #f59e0b;
+      color: #fbbf24;
+    }
+
+    /* Subtitles Card */
+    .subtitles-card {
+      margin-top: 14px;
+      width: 100%;
+      max-width: 854px;
+      background: rgba(17, 24, 39, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .subtitles-card strong {
+      color: #fbbf24;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Studio Header -->
+  <header class="studio-header">
+    <div class="badge">✨ Ready-To-Watch AI Video Studio</div>
+    <h1 class="title">SafarSetu Official Promo Video Player</h1>
+    <p class="subtitle">Complete Scene-by-Scene Animation with Voiceover in 3 Languages & 1-Click Video Downloader</p>
+  </header>
+
+  <!-- Video Canvas Player -->
+  <div class="player-wrapper landscape" id="playerWrapper">
+    <canvas id="videoCanvas" width="1280" height="720"></canvas>
+    
+    <!-- Floating On-Screen Controls -->
+    <div class="overlay-controls">
+      <div class="progress-container" id="progressBarContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="controls-row">
+        <div class="left-controls">
+          <button class="ctrl-btn" id="playBtn">▶ Play</button>
+          <button class="ctrl-btn" id="restartBtn">🔄 Replay</button>
+          <button class="ctrl-btn" id="voiceToggleBtn">🔊 Voice: ON</button>
+          <span class="time-display" id="timeDisplay">00:00 / 01:28</span>
+        </div>
+        <div>
+          <button class="ctrl-btn" id="fullscreenBtn">⛶ Fullscreen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Studio Settings & Actions Bar -->
+  <div class="studio-bar">
+    <!-- Language Selection -->
+    <div class="bar-group">
+      <span class="bar-label">Language:</span>
+      <button class="ctrl-btn active" data-lang="nimadi" id="langNimadi">🌾 निमाड़ी (Nimadi)</button>
+      <button class="ctrl-btn" data-lang="hindi" id="langHindi">🇮🇳 हिन्दी</button>
+      <button class="ctrl-btn" data-lang="english" id="langEnglish">🇬🇧 English</button>
+    </div>
+
+    <!-- Aspect Ratio Selection -->
+    <div class="bar-group">
+      <span class="bar-label">Format:</span>
+      <button class="ctrl-btn active" id="ratioLandscape">📺 16:9 (Landscape)</button>
+      <button class="ctrl-btn" id="ratioPortrait">📱 9:16 (Reel/Status)</button>
+    </div>
+
+    <!-- Download / Record Button -->
+    <button class="record-btn" id="recordBtn">
+      <span>🔴</span>
+      <span id="recordBtnText">Record & Download Video</span>
+    </button>
+  </div>
+
+  <!-- Scene Navigation Pills -->
+  <div class="scene-pills" id="scenePills">
+    <button class="scene-pill active" data-scene="0">1. Problem (Bus Stop)</button>
+    <button class="scene-pill" data-scene="1">2. SafarSetu Launch</button>
+    <button class="scene-pill" data-scene="2">3. Step 1 (App/Web)</button>
+    <button class="scene-pill" data-scene="3">4. Step 2 (Cars & 12h Time)</button>
+    <button class="scene-pill" data-scene="4">5. Step 3 (Driver & OTP)</button>
+    <button class="scene-pill" data-scene="5">6. Trust & Low Fare</button>
+    <button class="scene-pill" data-scene="6">7. Book Ride Now</button>
+  </div>
+
+  <!-- Realtime Script Live Subtitles Card -->
+  <div class="subtitles-card">
+    <strong>🎙️ Live Voiceover:</strong>
+    <span id="subtitleText">"राम राम दादा! कड़े जावा छे? इंदौर, खंडवा के खरगोन?..."</span>
+  </div>
+
+  <script>
+    // ── SCENES SCRIPT DATA (HINDI, ENGLISH, NIMADI) ──
+    const SCENES = [
+      {
+        id: 0,
+        title: "THE EVERYDAY PROBLEM",
+        duration: 11, // seconds
+        imageKey: 'scene1',
+        headline: "गाड़ी का इंतज़ार? / Cab Problems?",
+        subtitles: {
+          nimadi: "राम राम दादा! कड़े जावा छे? इंदौर, खंडवा के खरगोन? धूप-बारिश मा बस-गाड़ी का चक्कर मा हैरान-परेशान होइ रया? अब कतरोई दूर जाणो होय, चिंता बिल्कुल नी करणी!",
+          hindi: "Emergency me gaadi nahi mil rahi? Bus ka lamba intezar aur manmaana kiraya? Ab chinta chhodiye!",
+          english: "Stuck on the road waiting for a cab? High fares and endless delays? Not anymore!"
+        }
+      },
+      {
+        id: 1,
+        title: "INTRODUCING SAFARSETU",
+        duration: 12,
+        imageKey: 'scene2',
+        headline: "SAFARSETU — Safe • Fast • Reliable",
+        subtitles: {
+          nimadi: "आवि गयो छे आपलो अपणो 'सफरसेतु'! गाँव से लेई न शहर तक, थारो अपणो भरोसामंद सारथी — बिल्कुल आपणा बजट मा!",
+          hindi: "Pesh hai SafarSetu! Gaon se lekar shahar tak — aapki har yatra ko aasan, surakshit aur aaramdayak banane wala smart cab network!",
+          english: "Introducing SafarSetu! The smart, reliable cab booking service connecting villages to cities with comfort and trust!"
+        }
+      },
+      {
+        id: 2,
+        title: "STEP 1: OPEN APP / WEBSITE",
+        duration: 13,
+        imageKey: 'poster',
+        mockupType: 'map',
+        headline: "STEP 1: OPEN APP / WEBSITE",
+        subtitles: {
+          nimadi: "गाड़ी बुक करणो तो खाली ३ कदम को खेल छे! पहेलो कदम: हाथ का मोबाइल मा सफरसेतु खोलो, कड़े से बैठणो छे वो जगह चुण लो!",
+          hindi: "Sirf 3 aasan steps me gaadi book karein. Step 1: Apne mobile me SafarSetu kholein aur GPS se apna pickup point chunein.",
+          english: "Book your ride in just 3 simple steps. Step 1: Open the SafarSetu app or portal and select your pickup location."
+        }
+      },
+      {
+        id: 3,
+        title: "STEP 2: VEHICLE & 12-HOUR TIME",
+        duration: 15,
+        imageKey: 'poster',
+        mockupType: 'time',
+        headline: "STEP 2: CHOOSE CAB & TIME (AM/PM)",
+        subtitles: {
+          nimadi: "दूसरो कदम: आपणी पसंद की गाड़ी चुणो — वान, सेडान के ७-सीटर एरटिगा! ओर हाँ दादा, कदी भी कन्फ्यूजन नी होवे — सुई मा सुबक को AM होय के संझा को PM, साफ-साफ चुणी लो!",
+          hindi: "Step 2: Apni manpasand gaadi chunein — Mini, Sedan ya 7-Seater Ertiga! Aur haan, bina kisi confusion ke subah ka AM ya shaam ka PM time aasaani se set karein!",
+          english: "Step 2: Choose your vehicle — from economical sedans to spacious 7-seater SUVs. Select your exact travel time with clear AM and PM options — completely hassle-free!"
+        }
+      },
+      {
+        id: 4,
+        title: "STEP 3: DRIVER, LIVE GPS & OTP",
+        duration: 15,
+        imageKey: 'scene2',
+        mockupType: 'otp',
+        headline: "STEP 3: CONFIRM & ENJOY RIDE",
+        subtitles: {
+          nimadi: "तीसरो कदम: बटन दबाता ही गाड़ी पक्की! ड्राईवर का नाम, नंबर ओर गाड़ी सीधा नक्षा प लाइव दिखती-दिखती थारे घर का ओटला प! OTP दो ओर बैठो ठाठ से!",
+          hindi: "Step 3: Instant booking confirm! Verified driver ki live GPS location dekhein, secure OTP se ride shuru karein aur bina kisi tension ke safe journey enjoy karein!",
+          english: "Step 3: Instant confirmation! Track your verified driver in real-time, verify your ride with secure OTP, and travel with total peace of mind!"
+        }
+      },
+      {
+        id: 5,
+        title: "TRANSPARENT FARES & TRUST",
+        duration: 12,
+        imageKey: 'poster',
+        mockupType: 'trust',
+        headline: "LOWEST FARES & 24/7 SUPPORT",
+        subtitles: {
+          nimadi: "ना जादा भाड़ो, ना कोई धोखाधड़ी! पूरा भरोसामंद ड्राईवर, टेम प गाड़ी, ओर २४ घंटा साथ! म्हारो सफरसेतु, आपलो अपणो भरोसो!",
+          hindi: "Wajib daam, verified drivers, on-time pickup aur 24 ghante customer support. SafarSetu ke sath har safar hai aasan!",
+          english: "Affordable fares, verified drivers, on-time pickup, and round-the-clock support. With SafarSetu, every journey is a pleasure!"
+        }
+      },
+      {
+        id: 6,
+        title: "CALL TO ACTION",
+        duration: 10,
+        imageKey: 'poster',
+        mockupType: 'cta',
+        headline: "PLAN YOUR RIDE TODAY!",
+        subtitles: {
+          nimadi: "तो फिर देर कई बात की दादा? आज ही आपणी गाड़ी बुक करो सफरसेतु से! सफरसेतु — सुरक्छित सफर, आपलो अपणो मान!",
+          hindi: "Toh fir der kis baat ki? Aaj hi book karein apni ride SafarSetu ke sath! SafarSetu — Surakshit safar, sabka vishwas!",
+          english: "So why wait? Plan your next journey with SafarSetu today! SafarSetu — Your Journey, Our Commitment!"
+        }
+      }
+    ];
+
+    const TOTAL_DURATION = SCENES.reduce((acc, s) => acc + s.duration, 0);
+
+    // ── ASSET LOADER ──
+    const images = {};
+    const assetSources = {
+      scene1: '/video-assets/scene1.jpg',
+      scene2: '/video-assets/scene2.jpg',
+      poster: '/video-assets/poster.jpg'
+    };
+
+    let assetsLoaded = 0;
+    const totalAssets = Object.keys(assetSources).length;
+    for (const [key, src] of Object.entries(assetSources)) {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        images[key] = img;
+        assetsLoaded++;
+      };
+    }
+
+    // ── STATE ──
+    let isPlaying = false;
+    let currentTime = 0;
+    let currentLanguage = 'nimadi';
+    let isVoiceEnabled = true;
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let animationFrameId = null;
+    let lastTimestamp = 0;
+    let currentSpeechScene = -1;
+
+    // Canvas & UI Elements
+    const canvas = document.getElementById('videoCanvas');
+    const ctx = canvas.getContext('2d');
+    const playBtn = document.getElementById('playBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const voiceToggleBtn = document.getElementById('voiceToggleBtn');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const progressBar = document.getElementById('progressBar');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const recordBtn = document.getElementById('recordBtn');
+    const recordBtnText = document.getElementById('recordBtnText');
+    const subtitleText = document.getElementById('subtitleText');
+    const playerWrapper = document.getElementById('playerWrapper');
+
+    // Speech Synthesis
+    const synth = window.speechSynthesis;
+
+    function speakCurrentScene(sceneIndex) {
+      if (!isVoiceEnabled || !synth) return;
+      if (currentSpeechScene === sceneIndex) return;
+      currentSpeechScene = sceneIndex;
+
+      synth.cancel();
+      const text = SCENES[sceneIndex].subtitles[currentLanguage];
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 0.95;
+      utter.pitch = 1.05;
+
+      const voices = synth.getVoices();
+      if (currentLanguage === 'english') {
+        const engVoice = voices.find(v => v.lang.includes('en-IN') || v.lang.includes('en-US'));
+        if (engVoice) utter.voice = engVoice;
+      } else {
+        const hiVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('hi-IN'));
+        if (hiVoice) utter.voice = hiVoice;
+      }
+
+      synth.speak(utter);
+    }
+
+    // Format MM:SS
+    function fmtTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    // Get Active Scene
+    function getSceneAtTime(t) {
+      let accumulated = 0;
+      for (let i = 0; i < SCENES.length; i++) {
+        if (t >= accumulated && t < accumulated + SCENES[i].duration) {
+          return { scene: SCENES[i], index: i, sceneProgress: (t - accumulated) / SCENES[i].duration };
+        }
+        accumulated += SCENES[i].duration;
+      }
+      return { scene: SCENES[SCENES.length - 1], index: SCENES.length - 1, sceneProgress: 1 };
+    }
+
+    // ── RENDER ENGINE ──
+    function render(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      if (isPlaying) {
+        currentTime += delta;
+        if (currentTime >= TOTAL_DURATION) {
+          currentTime = TOTAL_DURATION;
+          isPlaying = false;
+          playBtn.textContent = '▶ Play';
+          if (isRecording) stopRecording();
+        }
+      }
+
+      // Update UI Progress
+      const progressPercent = (currentTime / TOTAL_DURATION) * 100;
+      progressBar.style.width = `${progressPercent}%`;
+      timeDisplay.textContent = `${fmtTime(currentTime)} / ${fmtTime(TOTAL_DURATION)}`;
+
+      const { scene, index, sceneProgress } = getSceneAtTime(currentTime);
+
+      // Trigger Voiceover
+      if (isPlaying) {
+        speakCurrentScene(index);
+      }
+
+      // Update Subtitle card
+      subtitleText.textContent = `"${scene.subtitles[currentLanguage]}"`;
+
+      // Update Scene Pill highlights
+      document.querySelectorAll('.scene-pill').forEach((pill, pIdx) => {
+        pill.classList.toggle('active', pIdx === index);
+      });
+
+      // Clear Canvas
+      ctx.fillStyle = '#050505';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // ── DRAW BACKGROUND IMAGE WITH KEN-BURNS ZOOM ──
+      const img = images[scene.imageKey];
+      if (img && img.complete) {
+        ctx.save();
+        // Subtle smooth zoom
+        const scale = 1.0 + (sceneProgress * 0.08);
+        const panX = Math.sin(sceneProgress * Math.PI) * 20;
+
+        ctx.translate(canvas.width / 2 + panX, canvas.height / 2);
+        ctx.scale(scale, scale);
+
+        // Aspect fit cover
+        const imgRatio = img.width / img.height;
+        const canvasRatio = canvas.width / canvas.height;
+        let dw, dh;
+        if (imgRatio > canvasRatio) {
+          dh = canvas.height;
+          dw = dh * imgRatio;
+        } else {
+          dw = canvas.width;
+          dh = dw / imgRatio;
+        }
+        ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
+
+        // Dark Vignette & Gradient Overlays
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, 'rgba(0,0,0,0.6)');
+        grad.addColorStop(0.3, 'rgba(0,0,0,0.1)');
+        grad.addColorStop(0.7, 'rgba(0,0,0,0.5)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.92)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // ── DRAW BRAND HEADER ──
+      ctx.save();
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.9)';
+      ctx.font = '900 24px Outfit, sans-serif';
+      ctx.fillText('🚖 SAFARSETU', 40, 50);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 14px Outfit, sans-serif';
+      ctx.fillText('Safe • Fast • Reliable', 220, 48);
+      ctx.restore();
+
+      // ── DRAW SCENE BADGE & HEADLINE ──
+      ctx.save();
+      // Step Badge
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(40, 80, 200, 30);
+      ctx.fillStyle = '#000000';
+      ctx.font = '900 13px Outfit, sans-serif';
+      ctx.fillText(scene.title, 50, 100);
+
+      // Headline
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 36px Outfit, sans-serif';
+      ctx.fillText(scene.headline, 40, 145);
+      ctx.restore();
+
+      // ── SCENE SPECIFIC GRAPHIC OVERLAYS ──
+      if (scene.id === 3) {
+        // Highlight 12-Hour Time AM/PM
+        ctx.save();
+        ctx.fillStyle = 'rgba(11, 30, 63, 0.92)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.roundRect(canvas.width - 440, 80, 400, 240, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = '900 18px Outfit, sans-serif';
+        ctx.fillText('⏰ 12-HOUR TIME (NO CONFUSION)', canvas.width - 415, 115);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 32px Outfit, sans-serif';
+        ctx.fillText('04:46', canvas.width - 415, 175);
+
+        // AM button
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(canvas.width - 280, 140, 60, 45);
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '800 16px Outfit, sans-serif';
+        ctx.fillText('☀️ AM', canvas.width - 275, 168);
+
+        // PM button (Active)
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(canvas.width - 210, 140, 65, 45);
+        ctx.fillStyle = '#000000';
+        ctx.font = '900 16px Outfit, sans-serif';
+        ctx.fillText('🌙 PM', canvas.width - 205, 168);
+
+        ctx.fillStyle = '#10b981';
+        ctx.font = '700 14px Outfit, sans-serif';
+        ctx.fillText('✓ Selected: 04:46 PM (Shaam / Raat)', canvas.width - 415, 220);
+        ctx.fillText('🚗 Fares from ₹10/km • Mini, Sedan, SUV', canvas.width - 415, 250);
+        ctx.restore();
+      } else if (scene.id === 4) {
+        // Driver Live Tracking Card
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3;
+        ctx.roundRect(canvas.width - 400, 80, 360, 220, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#10b981';
+        ctx.font = '900 16px Outfit, sans-serif';
+        ctx.fillText('✅ DRIVER ASSIGNED & TRACKING', canvas.width - 380, 115);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 20px Outfit, sans-serif';
+        ctx.fillText('Rameshwar Patidar (4.9 ★)', canvas.width - 380, 155);
+
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '600 15px Outfit, sans-serif';
+        ctx.fillText('Car: White Ertiga • MP-10-CA-4421', canvas.width - 380, 185);
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = '900 20px Outfit, sans-serif';
+        ctx.fillText('🔑 Ride OTP: 4 8 2 1', canvas.width - 380, 225);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '700 14px Outfit, sans-serif';
+        ctx.fillText('⚡ Arriving in 3 Mins at your door', canvas.width - 380, 260);
+        ctx.restore();
+      }
+
+      // ── DRAW ANIMATED SUBTITLE BANNER (BOTTOM) ──
+      ctx.save();
+      const subBoxH = 110;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.fillRect(0, canvas.height - subBoxH, canvas.width, subBoxH);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(0, canvas.height - subBoxH, canvas.width, 3);
+
+      // Lang indicator tag
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '800 14px Outfit, sans-serif';
+      const langLabel = currentLanguage === 'nimadi' ? '🌾 निमाड़ी बोली' : (currentLanguage === 'hindi' ? '🇮🇳 हिन्दी' : '🇬🇧 English');
+      ctx.fillText(langLabel + ':', 40, canvas.height - 75);
+
+      // Subtitle line
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 20px "Noto Sans Devanagari", Outfit, sans-serif';
+      const sub = scene.subtitles[currentLanguage];
+
+      // Word wrapping for subtitle
+      const words = sub.split(' ');
+      let line1 = '';
+      let line2 = '';
+      for (const w of words) {
+        if ((line1 + w).length < 65) {
+          line1 += w + ' ';
+        } else {
+          line2 += w + ' ';
+        }
+      }
+      ctx.fillText(line1, 40, canvas.height - 45);
+      if (line2) {
+        ctx.fillText(line2, 40, canvas.height - 18);
+      }
+      ctx.restore();
+
+      animationFrameId = requestAnimationFrame(render);
+    }
+
+    // Start render loop
+    animationFrameId = requestAnimationFrame(render);
+
+    // ── INTERACTION HANDLERS ──
+    playBtn.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      playBtn.textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+      if (!isPlaying && synth) synth.cancel();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      currentTime = 0;
+      currentSpeechScene = -1;
+      if (synth) synth.cancel();
+      isPlaying = true;
+      playBtn.textContent = '⏸ Pause';
+    });
+
+    voiceToggleBtn.addEventListener('click', () => {
+      isVoiceEnabled = !isVoiceEnabled;
+      voiceToggleBtn.textContent = isVoiceEnabled ? '🔊 Voice: ON' : '🔇 Voice: OFF';
+      if (!isVoiceEnabled && synth) synth.cancel();
+      else if (isVoiceEnabled && isPlaying) {
+        currentSpeechScene = -1;
+      }
+    });
+
+    // Language switchers
+    const langBtns = [
+      { id: 'langNimadi', lang: 'nimadi' },
+      { id: 'langHindi', lang: 'hindi' },
+      { id: 'langEnglish', lang: 'english' }
+    ];
+    langBtns.forEach(item => {
+      document.getElementById(item.id).addEventListener('click', () => {
+        currentLanguage = item.lang;
+        langBtns.forEach(b => document.getElementById(b.id).classList.remove('active'));
+        document.getElementById(item.id).classList.add('active');
+        currentSpeechScene = -1; // re-trigger voice
+      });
+    });
+
+    // Aspect ratio switchers
+    document.getElementById('ratioLandscape').addEventListener('click', () => {
+      playerWrapper.className = 'player-wrapper landscape';
+      canvas.width = 1280;
+      canvas.height = 720;
+      document.getElementById('ratioLandscape').classList.add('active');
+      document.getElementById('ratioPortrait').classList.remove('active');
+    });
+
+    document.getElementById('ratioPortrait').addEventListener('click', () => {
+      playerWrapper.className = 'player-wrapper portrait';
+      canvas.width = 720;
+      canvas.height = 1280;
+      document.getElementById('ratioPortrait').classList.add('active');
+      document.getElementById('ratioLandscape').classList.remove('active');
+    });
+
+    // Progress bar scrubbing
+    progressBarContainer.addEventListener('click', (e) => {
+      const rect = progressBarContainer.getBoundingClientRect();
+      const clickRatio = (e.clientX - rect.left) / rect.width;
+      currentTime = clickRatio * TOTAL_DURATION;
+      currentSpeechScene = -1;
+    });
+
+    // Scene pill click
+    document.querySelectorAll('.scene-pill').forEach((pill, pIdx) => {
+      pill.addEventListener('click', () => {
+        let t = 0;
+        for (let i = 0; i < pIdx; i++) t += SCENES[i].duration;
+        currentTime = t + 0.1;
+        currentSpeechScene = -1;
+      });
+    });
+
+    // Fullscreen
+    document.getElementById('fullscreenBtn').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        playerWrapper.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    // ── 1-CLICK RECORD & DOWNLOAD VIDEO ──
+    recordBtn.addEventListener('click', () => {
+      if (!isRecording) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    });
+
+    function startRecording() {
+      try {
+        const stream = canvas.captureStream(30); // 30 FPS
+        const options = { mimeType: 'video/webm;codecs=vp9' };
+        
+        try {
+          mediaRecorder = new MediaRecorder(stream, options);
+        } catch {
+          mediaRecorder = new MediaRecorder(stream);
+        }
+
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `safarsetu-promo-${currentLanguage}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          }, 100);
+          recordBtn.classList.remove('recording');
+          recordBtnText.textContent = 'Record & Download Video';
+          alert('🎉 Video successfully recorded and downloaded to your computer!');
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.classList.add('recording');
+        recordBtnText.textContent = 'Recording in progress... (Stop & Save)';
+
+        // Restart video from 0 to capture whole promo
+        currentTime = 0;
+        currentSpeechScene = -1;
+        isPlaying = true;
+        playBtn.textContent = '⏸ Pause';
+      } catch (err) {
+        alert('Could not start screen recorder: ' + err.message);
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+      }
+    }
+  </script>
+</body>
+</html>

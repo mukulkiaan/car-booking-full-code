@@ -343,5 +343,22 @@
     "whatsapp_btn": "WhatsApp Message",
     "routes": "Available Pan-India Local Routes",
     "back_home": "Back to Home"
+  },
+  "explainer": {
+    "badge": "APNA SAFARSETU",
+    "title": "How SafarSetu Works",
+    "subtitle": "Affordable, reliable, and comfortable cab rides connecting villages and cities",
+    "step1_title": "1. Select Location",
+    "step1_desc": "Choose your village, town, or city pickup and set your drop destination.",
+    "step2_title": "2. Choose Your Vehicle",
+    "step2_desc": "Van, Echo, Mini, Sedan, or SUV — view clear upfront pricing per kilometer.",
+    "step3_title": "3. Instant WhatsApp OTP",
+    "step3_desc": "No passwords needed! Simply enter your mobile number and verify via WhatsApp in seconds.",
+    "step4_title": "4. Verified Local Drivers",
+    "step4_desc": "Admin-verified local drivers with live GPS route tracking for complete safety.",
+    "badge_pickup": "5-Min Pickup",
+    "badge_fixed": "Fixed Rates",
+    "badge_pay": "Cash or UPI",
+    "badge_help": "24x7 Help"
   }
 }
