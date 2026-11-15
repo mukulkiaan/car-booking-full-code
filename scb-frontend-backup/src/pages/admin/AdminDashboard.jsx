@@ -95,6 +95,17 @@ const AdminDashboard = ({ activeTab }) => {
   const [helpline1, setHelpline1] = useState('6261828036');
   const [helpline2, setHelpline2] = useState('9755339783');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [waStatus, setWaStatus] = useState({ ready: false, qrDataUrl: null, loading: false });
+
+  const fetchWhatsAppStatus = async () => {
+    try {
+      setWaStatus(prev => ({ ...prev, loading: true }));
+      const s = await api('/api/auth/whatsapp/status');
+      setWaStatus({ ready: Boolean(s?.ready), qrDataUrl: s?.qrDataUrl || null, loading: false });
+    } catch {
+      setWaStatus(prev => ({ ...prev, loading: false }));
+    }
+  };
 
   const revenueData = useMemo(() => {
     if (dashboardStats?.revenueData?.length) {
@@ -245,6 +256,7 @@ const AdminDashboard = ({ activeTab }) => {
         setHelpline2(s.helpline2 || '9755339783');
       }
     }).catch(() => {});
+    fetchWhatsAppStatus();
   }, []);
 
   useEffect(() => {
@@ -1499,6 +1511,78 @@ const AdminDashboard = ({ activeTab }) => {
                   {isSavingSettings ? 'Saving Settings...' : 'Save QR Code & Helpline Settings'}
                 </button>
               </div>
+            </div>
+
+            {/* WhatsApp OTP Engine Card */}
+            <div className="glass-card p-6 sm:p-8 border border-border">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-green-500/20 flex items-center justify-center text-green-600 text-2xl font-black">
+                    💬
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-dark">
+                      SafarSetu WhatsApp OTP Engine
+                    </h3>
+                    <p className="text-xs text-muted font-bold">
+                      Direct WhatsApp OTP delivery & automated fake number filtering
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${waStatus.ready ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-amber-100 text-amber-700 border border-amber-300'}`}>
+                    <span className={`w-2 h-2 rounded-full ${waStatus.ready ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`} />
+                    {waStatus.ready ? 'Active / Connected' : 'Scan Required'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={fetchWhatsAppStatus}
+                    className="px-3 py-1.5 rounded-xl bg-dark/5 hover:bg-dark/10 text-dark text-xs font-bold transition-all flex items-center gap-1 border border-border"
+                    title="Refresh Status"
+                  >
+                    <span>🔄 Refresh Status</span>
+                  </button>
+                </div>
+              </div>
+
+              {waStatus.ready ? (
+                <div className="bg-green-50 border border-green-200 p-6 rounded-2xl text-center">
+                  <span className="text-4xl mb-2 block">✅</span>
+                  <h4 className="text-base font-black text-green-800 uppercase tracking-tight">
+                    WhatsApp Bot is Live & Connected!
+                  </h4>
+                  <p className="text-xs text-green-700 mt-1 font-bold">
+                    OTPs are actively being delivered directly to customers' real WhatsApp chats.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-dark/5 p-6 rounded-2xl border border-border flex flex-col items-center justify-center text-center">
+                  <p className="text-xs text-muted font-bold mb-3 max-w-md">
+                    Open WhatsApp on your phone → Tap <b>3 Dots / Settings</b> → <b>Linked Devices</b> → <b>Link a Device</b> and point camera to scan:
+                  </p>
+                  {waStatus.qrDataUrl ? (
+                    <div className="w-64 h-64 bg-white p-3 rounded-2xl shadow-md border-2 border-primary mb-3 flex items-center justify-center">
+                      <img
+                        src={waStatus.qrDataUrl}
+                        alt="WhatsApp Bot Pairing QR"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-64 h-64 bg-white/50 rounded-2xl border border-dashed border-border flex flex-col items-center justify-center p-4 mb-3">
+                      <span className="text-3xl mb-2">📲</span>
+                      <p className="text-xs text-muted font-bold">Generating QR code...</p>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={fetchWhatsAppStatus}
+                    className="btn-primary px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-md shadow-primary/20"
+                  >
+                    {waStatus.loading ? 'Loading QR Code...' : 'Refresh QR Code 🔄'}
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

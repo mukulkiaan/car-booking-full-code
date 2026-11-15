@@ -73,6 +73,11 @@ export default function LoginScreen({ navigation }) {
     if (res.success) {
       setSentOtpCode(res.otp || '');
       setOtpChannel(res.channel || '');
+      if (res.channel === 'SCREEN_FALLBACK' && res.otp) {
+        setOtp(res.otp);
+      } else {
+        setOtp('');
+      }
       setOtpStep('otp');
     } else {
       setError(res.error || 'Failed to send OTP. Please try again.');
@@ -327,17 +332,25 @@ export default function LoginScreen({ navigation }) {
                     />
                   </View>
 
-                  {/* WhatsApp Verification Notice */}
+                  {/* Verification Notice */}
                   <View style={styles.demoBanner}>
                     <Text style={styles.demoBannerTitle}>
-                      💬 {locale === 'nimadi' ? 'व्हाट्सएप्प जांच' : locale === 'hi' ? 'व्हाट्सएप सत्यापन' : 'WHATSAPP VERIFICATION'}
+                      {otpChannel === 'WHATSAPP'
+                        ? (locale === 'nimadi' ? '💬 व्हाट्सएप्प जांच' : locale === 'hi' ? '💬 व्हाट्सएप सत्यापन' : '💬 WHATSAPP VERIFICATION')
+                        : (locale === 'nimadi' ? '🛡️ सुरक्षा कोड' : locale === 'hi' ? '🛡️ सुरक्षा सत्यापन कोड' : '🛡️ INSTANT VERIFICATION')}
                     </Text>
-                    <Text style={[styles.demoBannerCode, { color: '#059669', fontSize: 13 }]}>
-                      {locale === 'nimadi'
-                        ? `+91 ${riderPhone.replace(/\D/g, '').slice(-10)} पर व्हाट्सएप्प मैसेज देखो!`
-                        : locale === 'hi'
-                        ? `+91 ${riderPhone.replace(/\D/g, '').slice(-10)} पर अपना व्हाट्सएप संदेश देखें!`
-                        : `OTP sent to your WhatsApp on +91 ${riderPhone.replace(/\D/g, '').slice(-10)}!`}
+                    <Text style={[styles.demoBannerCode, { color: otpChannel === 'WHATSAPP' ? '#059669' : COLORS.primary, fontSize: 13 }]}>
+                      {otpChannel === 'WHATSAPP'
+                        ? (locale === 'nimadi'
+                            ? `+91 ${riderPhone.replace(/\D/g, '').slice(-10)} पर व्हाट्सएप्प मैसेज देखो!`
+                            : locale === 'hi'
+                            ? `+91 ${riderPhone.replace(/\D/g, '').slice(-10)} पर अपना व्हाट्सएप संदेश देखें!`
+                            : `OTP sent to your WhatsApp on +91 ${riderPhone.replace(/\D/g, '').slice(-10)}!`)
+                        : (locale === 'nimadi'
+                            ? `सत्यापन कोड: ${sentOtpCode}`
+                            : locale === 'hi'
+                            ? `सत्यापन कोड: ${sentOtpCode}`
+                            : `Verification Code: ${sentOtpCode}`)}
                     </Text>
                   </View>
 

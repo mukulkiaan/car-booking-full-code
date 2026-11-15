@@ -108,9 +108,11 @@ const AuthModal = ({ isOpen, onClose, onLogin, initialMode = 'login' }) => {
       setResendTimer(30);
 
       if (res.channel === 'WHATSAPP') {
+        setOtp('');
         toast.success('💬 WhatsApp par OTP bhej diya gaya hai! Apna WhatsApp check karein.', { duration: 6000 });
       } else {
-        toast.success(res.message || `OTP code: ${res.otp}`, { duration: 6000 });
+        if (res.otp) setOtp(res.otp);
+        toast.success(`🔐 Verification Code: ${res.otp || ''}`, { duration: 6000 });
       }
     } catch (err) {
       toast.error(err.message || 'Failed to send OTP');
